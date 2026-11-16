@@ -12,7 +12,7 @@ class StoreLocalizacaoRequest extends SingeFormRequest
     public function authorize(): bool
     {
         return parent::authorize()
-            && $this->userHasAnyProfile(['Administrador', 'Operador']);
+            && $this->userHasAnyProfile(['Administrador', 'Coordenador']);
     }
 
     /** @return array<string, mixed> */

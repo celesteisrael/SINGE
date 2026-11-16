@@ -1,306 +1,286 @@
 import React, { useState } from 'react';
 import Icon from '../../components/common/Icon';
-import { Card, Button, StatusBadge, PrioBadge, Timeline, EmptyState, Modal, Field, inputCls } from '../../components/common/CommonComponents';
+import { Card, Button, StatusBadge, Timeline, EmptyState, Field, inputCls } from '../../components/common/CommonComponents';
 import { MozambiqueMap } from '../../components/map/MapComponents';
-import { EQUIPAS } from '../../data/mockData';
 import { useToast } from '../../contexts/ToastContext';
+import { ValidationError } from '../../services/api';
+import { validacoesService } from '../../services/validacoesService';
 
-export function DetalheOcorrencia({ o, setPage, role }) {
+const STATE_LABELS = {
+  registada: 'Registada',
+  em_avaliacao: 'Em avaliação',
+  em_atendimento: 'Em atendimento',
+  resolvida: 'Resolvida',
+  cancelada: 'Cancelada',
+};
+
+const VALIDATION_LABELS = {
+  PENDENTE: 'Pendente',
+  EM_VERIFICACAO: 'Em verificação',
+  VALIDADA: 'Validada',
+  NAO_CONFIRMADA: 'Não confirmada',
+  REJEITADA: 'Rejeitada',
+  DUPLICADA: 'Duplicada',
+};
+
+const NEGATIVE_VALIDATIONS = ['NAO_CONFIRMADA', 'REJEITADA'];
+
+function formatDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : new Intl.DateTimeFormat('pt-MZ', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+export function DetalheOcorrencia({ o, loading, error, onRefresh, onValidationSaved, onDownloadEvidence, setPage }) {
   const toast = useToast();
-  const [modalPrioridade, setModalPrioridade] = useState(false);
-  const [modalMissao, setModalMissao] = useState(false);
-  const [novaPrio, setNovaPrio] = useState(o?.prioridade || 'Alto');
-  const [justificacao, setJustificacao] = useState('');
-  const [equipaAlocada, setEquipaAlocada] = useState('');
-  const [instrucoes, setInstrucoes] = useState('');
+  const [validationState, setValidationState] = useState('VALIDADA');
+  const [reason, setReason] = useState('');
+  const [observations, setObservations] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+
+  const submitValidation = async (event) => {
+    event.preventDefault();
+    if (!o || submitting) return;
+    setFieldErrors({});
+    setSubmitting(true);
+    try {
+      await validacoesService.registar({
+        ocorrencia_id: o.id,
+        estado: validationState,
+        motivo: reason.trim(),
+        observacoes: observations.trim(),
+      });
+      setReason('');
+      setObservations('');
+      await onValidationSaved?.();
+      toast.success('Validação registada pelo servidor.');
+    } catch (validationError) {
+      if (validationError instanceof ValidationError) {
+        setFieldErrors(validationError.errors);
+      }
+      toast.error(validationError.message || 'Não foi possível registar a validação.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const downloadEvidence = async (evidence) => {
+    setDownloadError('');
+    try {
+      await onDownloadEvidence(evidence);
+    } catch (downloadFailure) {
+      setDownloadError(downloadFailure.message || 'Não foi possível descarregar a evidência.');
+    }
+  };
+
+  if (loading && !o) {
+    return <Card className="p-6 text-sm text-muted dark:text-dmuted">A carregar a ocorrência…</Card>;
+  }
+
+  if (error && !o) {
+    return (
+      <Card className="p-6" role="alert">
+        <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+        <button type="button" onClick={onRefresh} className="mt-2 text-sm text-brand underline">Tentar novamente</button>
+      </Card>
+    );
+  }
 
   if (!o) {
     return (
-      <EmptyState 
-        icon="FileText" 
-        title="Nenhuma ocorrência seleccionada" 
-        action={<Button onClick={() => setPage(role === 'coordenador' ? 'prioridades' : 'ocorrencias')}>Voltar</Button>}
+      <EmptyState
+        icon="FileText"
+        title="Nenhuma ocorrência seleccionada"
+        action={<Button onClick={() => setPage('ocorrencias')}>Voltar à lista</Button>}
       />
     );
   }
 
-  // Permissões estritas segundo o documento oficial
-  const isOperador = role === 'operador';
-  const isCoordenador = role === 'coordenador';
-  const isAdmin = role === 'administrador';
-
-  const handleValidarOperador = () => {
-    toast.success(`Ocorrência ${o.ref} validada pelo Operador e encaminhada à Coordenação de Emergências.`);
+  const location = o.localizacao_geografica || {};
+  const mapOccurrence = {
+    lat: Number(o.latitude ?? location.latitude),
+    lng: Number(o.longitude ?? location.longitude),
+    prioridade: null,
   };
-
-  const handleSolicitarInfo = () => {
-    toast.info(`Pedido de informação complementar enviado ao comunicante da ocorrência ${o.ref}.`);
-  };
-
-  const handleSalvarPrioridade = (e) => {
-    e.preventDefault();
-    if (!justificacao.trim()) {
-      toast.error('O Coordenador deve obrigatoriamente preencher a justificação da avaliação.');
-      return;
-    }
-    toast.success(`Prioridade de ${o.ref} fixada em "${novaPrio}" com validação humana.`);
-    setModalPrioridade(false);
-  };
-
-  const handleCriarMissao = (e) => {
-    e.preventDefault();
-    if (!equipaAlocada) {
-      toast.error('Selecione uma equipa disponível para a missão.');
-      return;
-    }
-    toast.success(`Missão tática criada e atribuída com sucesso à equipa ${equipaAlocada}!`);
-    setModalMissao(false);
-  };
+  const historyItems = (o.historico || []).map(item => ({
+    data: formatDate(item.created_at),
+    txt: [
+      item.estado_novo ? `Estado: ${STATE_LABELS[item.estado_novo] || item.estado_novo}` : '',
+      item.observacoes || '',
+      item.utilizador_nome ? `Por ${item.utilizador_nome}` : '',
+    ].filter(Boolean).join(' — ') || 'Registo de histórico',
+  }));
+  const latestValidation = o.validacoes?.[0];
+  const requiresReason = NEGATIVE_VALIDATIONS.includes(validationState);
 
   return (
     <div className="space-y-4">
-      {/* Botão de retorno e papel activo */}
-      <div className="flex items-center justify-between">
-        <button 
-          onClick={() => setPage(isCoordenador ? 'dashboard' : 'ocorrencias')} 
-          className="text-sm text-brand dark:text-dblue flex items-center gap-1 hover:underline font-medium"
-        >
-          <Icon name="ChevronLeft" size={16} /> Voltar
-        </button>
+      <button
+        type="button"
+        onClick={() => setPage('ocorrencias')}
+        className="text-sm text-brand dark:text-dblue flex items-center gap-1 hover:underline font-medium"
+      >
+        <Icon name="ChevronLeft" size={16} /> Voltar às ocorrências
+      </button>
 
-        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-          isOperador 
-            ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' 
-            : isCoordenador 
-              ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300' 
-              : 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300'
-        }`}>
-          Visão: {isOperador ? 'Operador (Triagem)' : isCoordenador ? 'Coordenador (Comando)' : 'Administrador (Auditoria)'}
-        </span>
-      </div>
+      {error && (
+        <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          {error}
+          <button type="button" onClick={onRefresh} className="ml-2 underline">Actualizar</button>
+        </div>
+      )}
 
-      {/* Título e Referência */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold text-muted dark:text-dmuted">{o.ref}</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-              {o.tipo}
-            </span>
-          </div>
-          <h2 className="text-xl font-bold text-ink dark:text-dink mt-1">{o.titulo}</h2>
+          <p className="font-mono text-xs font-bold text-muted dark:text-dmuted">Ocorrência #{o.id}</p>
+          <h1 className="text-xl font-bold text-ink dark:text-dink mt-1">{o.titulo}</h1>
           <p className="text-sm text-muted dark:text-dmuted">
-            {o.localidade ? `${o.localidade}, ` : ''}{o.distrito}, {o.provincia} · Registado em {o.data}
+            {o.tipo_ocorrencia?.nome || 'Tipo não informado'} · {formatDate(o.created_at)}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge s={o.estado} />
-          <PrioBadge p={o.prioridade} />
-        </div>
+        <StatusBadge s={STATE_LABELS[o.estado] || o.estado} />
       </div>
 
-      {/* Conteúdo Principal */}
       <div className="grid lg:grid-cols-3 gap-4">
-        {/* Coluna Esquerda: Descrição, Dados e Histórico */}
         <div className="lg:col-span-2 space-y-4">
           <Card className="p-5 space-y-4">
-            <h3 className="font-semibold text-ink dark:text-dink text-base">Relatório Detalhado da Situação</h3>
-            <p className="text-sm text-ink dark:text-dink leading-relaxed bg-light/50 dark:bg-dsidebar/30 p-3.5 rounded-lg border border-bd dark:border-dborder">
-              {o.descricao}
+            <h2 className="font-semibold text-ink dark:text-dink">Descrição e localização</h2>
+            <p className="text-sm text-ink dark:text-dink whitespace-pre-wrap">{o.descricao}</p>
+            <p className="text-sm text-muted dark:text-dmuted">
+              {[o.localizacao, location.endereco_referencia, location.distrito, location.provincia].filter(Boolean).join(', ') || 'Localização não disponível'}
             </p>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-sm">
-              <div className="p-3 rounded-lg bg-light/30 dark:bg-dsidebar/20">
-                <p className="text-xs text-muted dark:text-dmuted">Fonte / Denunciante</p>
-                <p className="font-semibold text-ink dark:text-dink mt-0.5">{o.fonte}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-light/30 dark:bg-dsidebar/20">
-                <p className="text-xs text-muted dark:text-dmuted">Pessoas Afectadas</p>
-                <p className="font-semibold text-ink dark:text-dink mt-0.5">{o.afectados ?? 'A apurar'}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-light/30 dark:bg-dsidebar/20">
-                <p className="text-xs text-muted dark:text-dmuted">Nível de Risco</p>
-                <p className="font-semibold text-ink dark:text-dink mt-0.5">{o.risco || 'Moderado'}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-light/30 dark:bg-dsidebar/20">
-                <p className="text-xs text-muted dark:text-dmuted">Responsável de Registo</p>
-                <p className="font-semibold text-ink dark:text-dink mt-0.5">{o.responsavel || 'Ana Sitoe'}</p>
-              </div>
+            <div className="border-t border-bd dark:border-dborder pt-3">
+              <p className="text-xs text-muted dark:text-dmuted">Comunicante</p>
+              <p className="text-sm font-medium text-ink dark:text-dink">{o.comunicante?.name || 'Dados não disponíveis'}</p>
+              {o.comunicante?.email && <p className="text-sm text-muted dark:text-dmuted">{o.comunicante.email}</p>}
             </div>
           </Card>
 
-          {/* Histórico da Ocorrência (Diagrama de Classes: HistoricoOcorrencia) */}
           <Card className="p-5">
-            <h3 className="font-semibold text-ink dark:text-dink mb-3">Histórico de Alterações e Rastreabilidade</h3>
-            <Timeline items={[
-              { data: o.data, txt: `Ocorrência comunicada por ${o.fonte} e registada no sistema` },
-              { data: '15/01 08:45', txt: 'Triagem realizada pelo Operador: dados verificados com sucesso' },
-              { data: '15/01 09:10', txt: `Avaliação de gravidade: Prioridade calculada como ${o.prioridade || 'a definir'}` },
-            ]} />
+            <h2 className="font-semibold text-ink dark:text-dink mb-3">Histórico da ocorrência</h2>
+            {historyItems.length
+              ? <Timeline items={historyItems} />
+              : <p className="text-sm text-muted dark:text-dmuted">Não há alterações registadas no histórico.</p>}
+          </Card>
+
+          <Card className="p-5 space-y-4">
+            <div>
+              <h2 className="font-semibold text-ink dark:text-dink">Validações registadas</h2>
+              {latestValidation && (
+                <p className="mt-2 text-sm text-ink dark:text-dink">
+                  Estado mais recente: <strong>{VALIDATION_LABELS[latestValidation.estado] || latestValidation.estado}</strong>
+                </p>
+              )}
+            </div>
+            {o.validacoes?.length ? (
+              <ol className="space-y-3">
+                {o.validacoes.map(validation => (
+                  <li key={validation.id} className="border-l-2 border-brand pl-3">
+                    <p className="text-sm font-medium text-ink dark:text-dink">
+                      {VALIDATION_LABELS[validation.estado] || validation.estado}
+                    </p>
+                    <p className="text-xs text-muted dark:text-dmuted">
+                      {formatDate(validation.data_validacao || validation.created_at)}
+                      {validation.utilizador_nome ? ` · ${validation.utilizador_nome}` : ''}
+                    </p>
+                    {validation.motivo && <p className="text-sm text-ink dark:text-dink mt-1">{validation.motivo}</p>}
+                    {validation.observacoes && <p className="text-sm text-muted dark:text-dmuted mt-1">{validation.observacoes}</p>}
+                  </li>
+                ))}
+              </ol>
+            ) : <p className="text-sm text-muted dark:text-dmuted">Ainda não existem validações.</p>}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="font-semibold text-ink dark:text-dink mb-3">Evidências</h2>
+            {o.evidencias?.length ? (
+              <ul className="divide-y divide-bd dark:divide-dborder">
+                {o.evidencias.map(evidence => (
+                  <li key={evidence.id} className="py-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-ink dark:text-dink truncate">{evidence.nome_ficheiro}</p>
+                      <p className="text-xs text-muted dark:text-dmuted">{evidence.descricao || evidence.tipo_mime}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => downloadEvidence(evidence)}
+                      aria-label={`Descarregar ${evidence.nome_ficheiro}`}
+                      className="shrink-0 p-2 text-brand dark:text-dblue"
+                    >
+                      <Icon name="Download" size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-sm text-muted dark:text-dmuted">Não existem evidências anexadas.</p>}
+            {downloadError && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">{downloadError}</p>}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="font-semibold text-ink dark:text-dink mb-1">Registar validação</h2>
+            <p className="text-xs text-muted dark:text-dmuted mb-4">
+              A identidade e a data são registadas pelo servidor. Esta acção não altera a prioridade nem o estado operacional.
+            </p>
+            <form onSubmit={submitValidation} className="space-y-4">
+              <Field label="Resultado" required error={fieldErrors.estado}>
+                <select
+                  value={validationState}
+                  onChange={event => {
+                    setValidationState(event.target.value);
+                    setFieldErrors(current => ({ ...current, estado: undefined, motivo: undefined }));
+                  }}
+                  className={inputCls}
+                >
+                  <option value="VALIDADA">Validada</option>
+                  <option value="NAO_CONFIRMADA">Não confirmada</option>
+                  <option value="REJEITADA">Rejeitada</option>
+                </select>
+              </Field>
+              {requiresReason && (
+                <Field label="Motivo" required error={fieldErrors.motivo}>
+                  <textarea
+                    value={reason}
+                    onChange={event => setReason(event.target.value)}
+                    className={inputCls}
+                    rows={3}
+                    required
+                  />
+                </Field>
+              )}
+              <Field label="Observações" error={fieldErrors.observacoes}>
+                <textarea
+                  value={observations}
+                  onChange={event => setObservations(event.target.value)}
+                  className={inputCls}
+                  rows={3}
+                />
+              </Field>
+              {fieldErrors.geral && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{fieldErrors.geral}</p>}
+              <div className="flex justify-end">
+                <Button type="submit" icon="CheckCircle" disabled={submitting}>
+                  {submitting ? 'A registar…' : 'Registar validação'}
+                </Button>
+              </div>
+            </form>
           </Card>
         </div>
 
-        {/* Coluna Direita: Mapa e Ações Específicas por Perfil */}
-        <div className="space-y-4">
-          <Card className="p-5 space-y-3">
-            <h3 className="font-semibold text-ink dark:text-dink text-sm">Localização no Mapa</h3>
-            <div className="h-44 rounded-lg overflow-hidden border border-bd dark:border-dborder">
-              <MozambiqueMap ocorrencias={[o]} height={176} />
+        <aside className="space-y-4">
+          <Card className="p-5">
+            <h2 className="font-semibold text-ink dark:text-dink mb-3">Localização geográfica</h2>
+            <div className="h-48 rounded-lg overflow-hidden">
+              <MozambiqueMap ocorrencias={[mapOccurrence]} height={192} />
             </div>
-            <p className="text-xs text-muted dark:text-dmuted text-center">
-              Coordenadas: {o.lat ? `${o.lat}, ${o.lng}` : 'Georreferenciação aproximada'}
+            <p className="text-xs text-muted dark:text-dmuted mt-2">
+              {location.endereco_referencia || o.localizacao || 'Localização não disponível'}
             </p>
           </Card>
-
-          {/* AÇÕES DIFERENCIADAS CONFORME O PERFIL */}
-          <Card className="p-5 space-y-3 border-t-4 border-t-brand">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-ink dark:text-dink text-sm">Painel de Ações Autorizadas</h3>
-              <Icon name="ShieldCheck" size={16} className="text-brand dark:text-dblue" />
-            </div>
-
-            {/* FLUXO DO OPERADOR: Triagem e Verificação */}
-            {isOperador && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted dark:text-dmuted leading-relaxed">
-                  Competência do Operador: Confirmar a veracidade das informações antes de submeter ao Coordenador.
-                </p>
-                <Button 
-                  icon="CheckCircle" 
-                  className="w-full bg-green-600 hover:bg-green-700" 
-                  onClick={handleValidarOperador}
-                >
-                  Validar e Encaminhar
-                </Button>
-                <Button 
-                  variant="secondary" 
-                  icon="MessageSquare" 
-                  className="w-full" 
-                  onClick={handleSolicitarInfo}
-                >
-                  Solicitar Info Complementar
-                </Button>
-              </div>
-            )}
-
-            {/* FLUXO DO COORDENADOR: Avaliação de Prioridade e Despacho de Missão */}
-            {isCoordenador && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted dark:text-dmuted leading-relaxed">
-                  Competência do Coordenador: Avaliar gravidade com validação humana e mobilizar equipas de socorro.
-                </p>
-                <Button 
-                  icon="AlertTriangle" 
-                  className="w-full bg-amber-600 hover:bg-amber-700 text-white" 
-                  onClick={() => setModalPrioridade(true)}
-                >
-                  Avaliar / Validar Prioridade
-                </Button>
-                <Button 
-                  icon="Target" 
-                  className="w-full" 
-                  onClick={() => setModalMissao(true)}
-                >
-                  Atribuir Missão e Despachar
-                </Button>
-              </div>
-            )}
-
-            {/* FLUXO DO ADMINISTRADOR: Auditoria e Governança */}
-            {isAdmin && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted dark:text-dmuted leading-relaxed">
-                  Competência do Administrador: Acesso estritamente para auditoria de integridade e conformidade de dados.
-                </p>
-                <Button 
-                  variant="secondary" 
-                  icon="History" 
-                  className="w-full" 
-                  onClick={() => setPage('auditoria')}
-                >
-                  Consultar Logs de Auditoria
-                </Button>
-              </div>
-            )}
-          </Card>
-        </div>
+        </aside>
       </div>
-
-      {/* Modal de Avaliação de Prioridade (Exclusivo do Coordenador) */}
-      <Modal
-        open={modalPrioridade}
-        onClose={() => setModalPrioridade(false)}
-        title={`Avaliação de Gravidade: ${o.ref}`}
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setModalPrioridade(false)}>Cancelar</Button>
-            <Button icon="CheckCircle" onClick={handleSalvarPrioridade}>Confirmar Avaliação</Button>
-          </div>
-        }
-      >
-        <form onSubmit={handleSalvarPrioridade} className="space-y-4">
-          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-xs text-blue-800 dark:text-blue-300">
-            A decisão final é humana. O sistema apoia calculando a gravidade com base nos fatores configurados pelo Administrador.
-          </div>
-
-          <Field label="Definição Final de Prioridade" required>
-            <select value={novaPrio} onChange={e => setNovaPrio(e.target.value)} className={inputCls}>
-              <option>Crítico</option>
-              <option>Alto</option>
-              <option>Médio</option>
-              <option>Baixo</option>
-            </select>
-          </Field>
-
-          <Field label="Justificação Operacional Obrigatória" required>
-            <textarea 
-              rows={3} 
-              className={inputCls} 
-              placeholder="Ex: Alto risco de perda de vidas humanas e subida das águas na bacia do rio..."
-              value={justificacao}
-              onChange={e => setJustificacao(e.target.value)}
-              required
-            />
-          </Field>
-        </form>
-      </Modal>
-
-      {/* Modal de Despacho de Missão (Exclusivo do Coordenador) */}
-      <Modal
-        open={modalMissao}
-        onClose={() => setModalMissao(false)}
-        title={`Despachar Missão Tática para ${o.ref}`}
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setModalMissao(false)}>Cancelar</Button>
-            <Button icon="Target" onClick={handleCriarMissao}>Criar e Despachar</Button>
-          </div>
-        }
-      >
-        <form onSubmit={handleCriarMissao} className="space-y-4">
-          <Field label="Selecione a Equipa de Resposta Disponível" required>
-            <select value={equipaAlocada} onChange={e => setEquipaAlocada(e.target.value)} className={inputCls} required>
-              <option value="">Selecione uma equipa disponível...</option>
-              {EQUIPAS.filter(eq => eq.estado === 'Disponível').map(eq => (
-                <option key={eq.id} value={eq.nome}>
-                  {eq.nome} ({eq.tipo} · {eq.membros} membros)
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Instruções Operacionais e Objetivos Táticos" required>
-            <textarea 
-              rows={3} 
-              className={inputCls} 
-              placeholder="Ex: Estabelecer centro de evacuação no campo comunitário e apoiar busca e salvamento..."
-              value={instrucoes}
-              onChange={e => setInstrucoes(e.target.value)}
-              required
-            />
-          </Field>
-        </form>
-      </Modal>
     </div>
   );
 }

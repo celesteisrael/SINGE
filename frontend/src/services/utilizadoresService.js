@@ -2,28 +2,35 @@
  * SINGE - Serviço de Gestão de Utilizadores (RBAC)
  * Comunica com o backend Laravel / Sanctum API
  */
-import { api } from './api';
+import { api, ApiError } from './api';
+
+function dataOf(response) {
+  if (!response?.success || response.data === undefined) {
+    throw new ApiError('A API devolveu uma resposta inválida para a gestão de utilizadores.', 502, response);
+  }
+  return response.data;
+}
 
 export const utilizadoresService = {
   /**
    * Lista todos os utilizadores registados
    */
   async listar() {
-    return api.get('/utilizadores');
+    return dataOf(await api.get('/utilizadores'));
   },
 
   /**
    * [R2] Cria um novo utilizador
    */
   async criar(dados) {
-    return api.post('/utilizadores', dados);
+    return dataOf(await api.post('/utilizadores', dados));
   },
 
   /**
    * Atualiza dados de um utilizador existente
    */
   async atualizar(id, dados) {
-    return api.put(`/utilizadores/${id}`, dados);
+    return dataOf(await api.put(`/utilizadores/${id}`, dados));
   },
 
   /**
@@ -31,7 +38,7 @@ export const utilizadoresService = {
    * Altera o estado para "Inactivo"
    */
   async desativar(id) {
-    return api.patch(`/utilizadores/${id}/desativar`);
+    return dataOf(await api.patch(`/utilizadores/${id}/desativar`, {}));
   },
 };
 

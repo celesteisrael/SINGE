@@ -1,104 +1,68 @@
-import React, { useState } from 'react';
-import Icon from '../../components/common/Icon';
+import React, { useMemo, useState } from 'react';
 import { Card, EmptyState, inputCls } from '../../components/common/CommonComponents';
-import { ALERTAS } from '../../data/mockData';
 
-export function CidadaoAlertas({ setPage, setSelectedAlerta }) {
-  const [tipo, setTipo] = useState('');
-  const [prov, setProv] = useState('');
-  const [nivel, setNivel] = useState('');
+const severityLabel = {
+  critica: 'CRÍTICA',
+  alta: 'ALTA',
+  media: 'MÉDIA',
+  baixa: 'BAIXA',
+  informativa: 'INFORMAÇÃO',
+};
+const severityClass = {
+  critica: 'bg-red-700',
+  alta: 'bg-orange-600',
+  media: 'bg-yellow-600',
+  baixa: 'bg-blue-700',
+  informativa: 'bg-slate-600',
+};
 
-  const filtered = ALERTAS.filter(a =>
-    (!tipo || a.tipo === tipo) && 
-    (!prov || a.regiao.includes(prov)) && 
-    (!nivel || a.nivel === nivel)
-  );
-
-  const nivelMap = { 
-    'Crítico': { bg: 'bg-red-600', label: 'CRÍTICO' }, 
-    'Elevado': { bg: 'bg-orange-500', label: 'ELEVADO' }, 
-    'Médio': { bg: 'bg-yellow-500', label: 'MÉDIO' }, 
-    'Informativo': { bg: 'bg-brand', label: 'INFORMAÇÃO' } 
-  };
+export function CidadaoAlertas({ alertas = [], loading = false, error = '', onRefresh, setPage, setSelectedAlerta }) {
+  const [type, setType] = useState('');
+  const [severity, setSeverity] = useState('');
+  const types = useMemo(() => [...new Set(alertas.map(alert => alert.tipo_perigo))], [alertas]);
+  const filtered = alertas.filter(alert => (!type || alert.tipo_perigo === type)
+    && (!severity || alert.severidade === severity));
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-ink dark:text-dink">Alertas e Avisos</h1>
-        <p className="text-sm text-muted dark:text-dmuted mt-1">
-          Alertas emitidos por fontes autorizadas (INGD, INAM, MISAU). <span className="font-medium">Dados de demonstração.</span>
-        </p>
-      </div>
-
-      <Card className="p-4">
-        <div className="grid md:grid-cols-3 gap-3">
-          <select value={tipo} onChange={e => setTipo(e.target.value)} className={inputCls}>
-            <option value="">Todos os tipos</option>
-            {[...new Set(ALERTAS.map(a => a.tipo))].map(t => <option key={t}>{t}</option>)}
-          </select>
-          <select value={nivel} onChange={e => setNivel(e.target.value)} className={inputCls}>
-            <option value="">Todos os níveis</option>
-            <option>Crítico</option>
-            <option>Elevado</option>
-            <option>Médio</option>
-            <option>Informativo</option>
-          </select>
-          <select value={prov} onChange={e => setProv(e.target.value)} className={inputCls}>
-            <option value="">Todas as regiões</option>
-            {['Maputo', 'Gaza', 'Sofala', 'Zambézia', 'Cabo Delgado', 'Nampula'].map(p => <option key={p}>{p}</option>)}
-          </select>
-        </div>
+    <div className="mx-auto max-w-6xl space-y-4">
+      <header>
+        <h1 className="text-2xl font-bold text-ink dark:text-dink">Alertas públicos</h1>
+        <p className="mt-1 text-sm text-muted dark:text-dmuted">Alertas publicados por autoridades autorizadas. A relevância geográfica refere-se à área indicada, não à localização actual do cidadão.</p>
+      </header>
+      {error && <Card className="p-4 text-sm text-red-700" role="alert">{error}<button className="ml-3 underline" onClick={onRefresh}>Tentar novamente</button></Card>}
+      <Card className="grid gap-3 p-4 md:grid-cols-2">
+        <select className={inputCls} value={type} onChange={event => setType(event.target.value)}>
+          <option value="">Todos os tipos de perigo</option>
+          {types.map(value => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <select className={inputCls} value={severity} onChange={event => setSeverity(event.target.value)}>
+          <option value="">Todas as severidades</option>
+          {Object.entries(severityLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
       </Card>
-
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <Card>
-            <EmptyState icon="Bell" title="Sem alertas encontrados" description="Nenhum alerta corresponde aos filtros seleccionados." />
-          </Card>
-        ) : (
-          filtered.map(a => {
-            const lvl = nivelMap[a.nivel] || nivelMap.Informativo;
-            return (
-              <Card key={a.id} className={`p-5 transition-colors ${a.ativo ? 'hover:border-brand/40' : 'opacity-70'}`}>
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded text-white ${lvl.bg}`}>{lvl.label}</span>
-                    <span className="text-xs text-muted dark:text-dmuted">{a.tipo}</span>
-                    {!a.ativo && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">
-                        Expirado
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-muted dark:text-dmuted whitespace-nowrap">{a.data}</span>
-                </div>
-                <h3 className="text-base font-semibold text-ink dark:text-dink">{a.titulo}</h3>
-                <p className="text-xs text-muted dark:text-dmuted mt-1">
-                  Região afectada: <span className="font-medium text-ink dark:text-dink">{a.regiao}</span> · Validade: {a.validade}
-                </p>
-                <p className="text-sm text-ink dark:text-dink mt-3">{a.descricao}</p>
-                
-                <div className="mt-3 p-3 rounded-lg bg-lblue dark:bg-dblue/10 text-xs">
-                  <p className="font-semibold text-ink dark:text-dink mb-1 flex items-center gap-1">
-                    <Icon name="Shield" size={12} className="text-brand dark:text-dblue" /> Recomendações
-                  </p>
-                  <p className="text-ink dark:text-dink">{a.recomendacoes}</p>
-                </div>
-                
-                <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2 border-t border-bd dark:border-dborder">
-                  <p className="text-xs text-muted dark:text-dmuted">Fonte oficial: {a.entidade}</p>
-                  <button 
-                    onClick={() => { setSelectedAlerta(a); setPage('detalhe-alerta'); }} 
-                    className="text-xs text-brand dark:text-dblue hover:underline flex items-center gap-1 font-medium"
-                  >
-                    Consultar detalhes <Icon name="ArrowRight" size={12} />
-                  </button>
-                </div>
-              </Card>
-            );
-          })
-        )}
-      </div>
+      {loading ? <Card className="p-6 text-sm text-muted">A carregar alertas publicados…</Card>
+        : filtered.length === 0 ? <Card><EmptyState icon="Bell" title="Não há alertas publicados para estes filtros." /></Card>
+          : <div className="space-y-3">{filtered.map(alert => (
+            <Card key={alert.id} className="p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded px-2 py-1 text-xs font-bold text-white ${severityClass[alert.severidade] || severityClass.informativa}`}>
+                  {severityLabel[alert.severidade] || alert.severidade}
+                </span>
+                <span className="text-xs text-muted">{alert.tipo_perigo}</span>
+                {alert.estado === 'encerrado' && <span className="rounded bg-slate-200 px-2 py-1 text-xs">Encerrado</span>}
+                {alert.estado === 'publicado' && !alert.activo && <span className="rounded bg-slate-200 px-2 py-1 text-xs">Fora do período de validade</span>}
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-ink dark:text-dink">{alert.titulo}</h2>
+              <p className="mt-1 text-sm text-muted dark:text-dmuted">
+                Área: {alert.area_geografica || [alert.localizacao?.provincia, alert.localizacao?.distrito].filter(Boolean).join(', ') || 'Não indicada'}
+                {' · '}Publicado: {alert.data_publicacao ? new Date(alert.data_publicacao).toLocaleString() : '—'}
+              </p>
+              <p className="mt-3 text-sm text-ink dark:text-dink">{alert.descricao}</p>
+              <div className="mt-3 rounded-lg bg-lblue p-3 text-sm dark:bg-dblue/10"><strong>Recomendações:</strong> {alert.recomendacoes}</div>
+              <p className="mt-3 text-xs text-muted">Fonte: {alert.fonte}</p>
+              <button className="mt-2 text-sm font-medium text-brand hover:underline" onClick={() => { setSelectedAlerta(alert); setPage('detalhe-alerta'); }}>Ver detalhe</button>
+            </Card>
+          ))}</div>}
     </div>
   );
 }

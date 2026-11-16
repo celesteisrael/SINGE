@@ -3,12 +3,17 @@
 namespace App\Models;
 
 use App\Enums\EstadoOcorrencia;
+use Database\Factories\OcorrenciaFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Ocorrencia extends Model
 {
+    /** @use HasFactory<OcorrenciaFactory> */
+    use HasFactory;
+
     protected $table = 'ocorrencias';
 
     protected $fillable = [
@@ -21,6 +26,10 @@ class Ocorrencia extends Model
         'tipo_ocorrencia_id',
         'prioridade_id',
         'utilizador_id',
+        'origem',
+        'comunicante_nome',
+        'comunicante_contacto',
+        'data_ocorrencia',
         'estado',
     ];
 
@@ -29,6 +38,7 @@ class Ocorrencia extends Model
         return [
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
+            'data_ocorrencia' => 'datetime',
             'estado' => EstadoOcorrencia::class,
         ];
     }

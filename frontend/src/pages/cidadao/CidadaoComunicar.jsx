@@ -2,619 +2,429 @@ import React, { useState } from 'react';
 import Icon from '../../components/common/Icon';
 import { Card, Button, Field, inputCls } from '../../components/common/CommonComponents';
 import { LocationPicker } from '../../components/map/MapComponents';
-import { USERS } from '../../data/mockData';
+import { GeographicComboboxes } from '../../components/common/GeographicComboboxes';
 import { useToast } from '../../contexts/ToastContext';
 import { validarOcorrencia } from '../../validation/ocorrencia';
 import { ocorrenciasService } from '../../services/ocorrenciasService';
 import { NetworkError, ValidationError } from '../../services/api';
 
-export function CidadaoComunicar({ setPage, onCreated, onOcorrenciaCriada }) {
+const SECTIONS = [
+  { id: 'A', label: 'Tipo' },
+  { id: 'B', label: 'Descrição' },
+  { id: 'C', label: 'Localização' },
+  { id: 'D', label: 'Evidências' },
+  { id: 'E', label: 'Confirmação' },
+];
+
+const TYPE_ICONS = ['Waves', 'Wind', 'Flame', 'MapPin', 'AlertTriangle', 'Leaf', 'AlertCircle'];
+
+const EMPTY_FORM = {
+  tipo: '',
+  titulo: '',
+  descricao: '',
+  provincia: '',
+  distrito: '',
+  localidade: '',
+  endereco: '',
+  lat: '',
+  lng: '',
+  confirmed: false,
+  provincia_id: '',
+  distrito_id: '',
+  geografia: {},
+};
+
+function mapValidationErrors(errors) {
+  const mapped = { ...errors };
+  Object.entries(errors).forEach(([key, message]) => {
+    if (key.startsWith('referencia_geografica.')) mapped[key.replace('referencia_geografica.', '')] = message;
+  });
+  return {
+    ...mapped,
+    tipo: mapped.tipo_ocorrencia_id || mapped.tipo,
+    coordenadas: mapped.latitude || mapped.longitude || mapped.coordenadas,
+  };
+}
+
+export function CidadaoComunicar({ user, types = [], typesError = '', setPage, onCreated }) {
   const toast = useToast();
-  const [sec, setSec] = useState('A'); // Exatamente 5 passos: A, B, C, D, E [RF16]
+  const [section, setSection] = useState('A');
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(null);
   const [geoLoading, setGeoLoading] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState({});
 
-  // Campos controlados preservados entre secções
-  const [form, setForm] = useState({
-    tipo: '',
-    titulo: '',
-    descricao: '',
-    data: new Date().toISOString().slice(0, 16),
-    provincia: 'Sofala',
-    distrito: '',
-    localidade: '',
-    endereco: '',
-    lat: '',
-    lng: '',
-    descricaoEvidencias: '',
-    confirmed: false,
-  });
-
-  const tipos = [
-    { id: 'Cheia', label: 'Cheias ou inundações', icon: 'Waves', color: 'text-blue-600 dark:text-blue-300' },
-    { id: 'Ciclone', label: 'Ciclone ou tempestade', icon: 'Wind', color: 'text-indigo-600 dark:text-indigo-300' },
-    { id: 'Incêndio', label: 'Incêndio', icon: 'Flame', color: 'text-orange-600 dark:text-orange-300' },
-    { id: 'Deslizamento', label: 'Deslizamento de terras', icon: 'MapPin', color: 'text-amber-600 dark:text-amber-300' },
-    { id: 'Acidente', label: 'Acidente', icon: 'AlertTriangle', color: 'text-red-600 dark:text-red-300' },
-    { id: 'Surto de doença', label: 'Risco sanitário', icon: 'Leaf', color: 'text-green-600 dark:text-green-300' },
-    { id: 'Outra situação', label: 'Outra situação', icon: 'AlertCircle', color: 'text-slate-600 dark:text-slate-300' },
-  ];
-
-  // [RF16] Exatamente 5 passos estruturados
-  const secs = [
-    { id: 'A', label: 'Tipo' },
-    { id: 'B', label: 'Descrição' },
-    { id: 'C', label: 'Localização' },
-    { id: 'D', label: 'Evidências' },
-    { id: 'E', label: 'Confirmação' }
-  ];
-
-  const handleChange = (field, value) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-    if (fieldErrors[field] || fieldErrors.localizacao || fieldErrors.coordenadas) {
-      setFieldErrors(prev => {
-        const next = { ...prev };
-        delete next[field];
-        if (field === 'lat' || field === 'lng' || field === 'provincia' || field === 'distrito') {
-          delete next.localizacao;
-          delete next.coordenadas;
-        }
-        return next;
-      });
-    }
-  };
-
-  const handleLocationPick = (coords) => {
-    setForm(prev => ({
-      ...prev,
-      lat: coords.lat !== null && coords.lat !== undefined ? String(coords.lat) : '',
-      lng: coords.lng !== null && coords.lng !== undefined ? String(coords.lng) : '',
-    }));
-    if (fieldErrors.localizacao || fieldErrors.coordenadas) {
-      setFieldErrors(prev => {
-        const next = { ...prev };
+  const setField = (field, value) => {
+    setForm(current => ({ ...current, [field]: value }));
+    setFieldErrors(current => {
+      const next = { ...current };
+      delete next[field];
+      if (['provincia', 'distrito', 'localidade', 'endereco', 'lat', 'lng'].includes(field)) {
         delete next.localizacao;
         delete next.coordenadas;
-        return next;
-      });
-    }
+      }
+      return next;
+    });
   };
 
-  const usarLocalizacao = () => {
-    if (!navigator.geolocation) { 
-      toast.error('Geolocalização não disponível no seu dispositivo.'); 
-      return; 
+  const setCoordinates = (latitude, longitude) => {
+    setForm(current => ({
+      ...current,
+      lat: latitude === null || latitude === undefined ? '' : String(latitude),
+      lng: longitude === null || longitude === undefined ? '' : String(longitude),
+    }));
+    setFieldErrors(current => {
+      const next = { ...current };
+      delete next.localizacao;
+      delete next.coordenadas;
+      delete next.latitude;
+      delete next.longitude;
+      return next;
+    });
+  };
+
+  const getDeviceLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocalização não disponível neste dispositivo.');
+      return;
     }
+
     setGeoLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setForm(prev => ({
-          ...prev,
-          lat: String(pos.coords.latitude),
-          lng: String(pos.coords.longitude),
-        }));
+      ({ coords }) => {
+        setCoordinates(coords.latitude, coords.longitude);
         setGeoLoading(false);
-        toast.success('Localização GPS obtida com sucesso.');
+        toast.success('Localização GPS obtida.');
       },
       () => {
         setGeoLoading(false);
-        toast.error('Não foi possível obter a localização automática. Preencha manualmente.');
+        toast.error('Não foi possível obter a localização. Indique-a manualmente.');
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000 },
     );
   };
 
-  const handleSubmit = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
+  const submit = async (event) => {
+    event.preventDefault();
     if (isSubmitting) return;
 
-    // 1) Validação das regras puras
     const errors = validarOcorrencia(form);
-
-    // Validação da confirmação de veracidade no passo E
-    if (!form.confirmed) {
-      errors.confirm = 'Confirme que as informações comunicadas são verdadeiras.';
-    }
-
-    if (Object.keys(errors).length > 0) {
+    if (!form.tipo) errors.tipo = 'O tipo de ocorrência é obrigatório.';
+    if (!form.confirmed) errors.confirm = 'Confirme que as informações comunicadas são verdadeiras.';
+    if (Object.keys(errors).length) {
       setFieldErrors(errors);
-
-      // Foca/vai para a primeira secção com erro [Requisito 2]
-      if (errors.tipo) {
-        setSec('A');
-      } else if (errors.titulo || errors.descricao || errors.data) {
-        setSec('B');
-      } else if (errors.localizacao || errors.provincia || errors.distrito || errors.coordenadas) {
-        setSec('C');
-      } else if (errors.confirm) {
-        setSec('E');
-      }
+      setSection(errors.tipo ? 'A' : errors.titulo || errors.descricao ? 'B' : errors.localizacao ? 'C' : 'E');
       toast.error('Corrija os campos assinalados antes de submeter.');
       return;
     }
 
+    const locationParts = [form.endereco, form.localidade, form.distrito, form.provincia]
+      .map(value => value.trim())
+      .filter(Boolean);
+    const location = locationParts.length
+      ? locationParts.join(', ')
+      : `Coordenadas: ${form.lat}, ${form.lng}`;
+
     setIsSubmitting(true);
     setFieldErrors({});
-
     try {
-      const payload = {
-        tipo: form.tipo,
+      const occurrence = await ocorrenciasService.registar({
+        tipo_ocorrencia_id: Number(form.tipo),
         titulo: form.titulo.trim(),
         descricao: form.descricao.trim(),
-        data: form.data,
-        provincia: form.provincia,
-        distrito: form.distrito.trim(),
-        localidade: form.localidade.trim(),
-        endereco: form.endereco.trim(),
-        lat: form.lat !== '' ? Number(form.lat) : null,
-        lng: form.lng !== '' ? Number(form.lng) : null,
-        descricaoEvidencias: form.descricaoEvidencias.trim(),
-        fonte: 'Cidadão',
-      };
-
-      // [CU01] Estado e identificador vêm da API, o frontend não os inventa
-      const respostaApi = await ocorrenciasService.registar(payload);
-      
-      toast.success('Ocorrência comunicada com sucesso.');
-      setSubmitted({
-        ref: respostaApi?.ref || respostaApi?.id || 'OC-2025-NOVA',
-        data: respostaApi?.data || new Date().toLocaleString('pt-PT'),
-        tipo: respostaApi?.tipo || form.tipo,
-        local: form.distrito ? `${form.distrito}, ${form.provincia}` : (form.lat ? `${form.lat}, ${form.lng}` : 'Moçambique')
+        localizacao: location,
+        latitude: form.lat === '' ? null : Number(form.lat),
+        longitude: form.lng === '' ? null : Number(form.lng),
+        referencia_geografica: form.provincia_id && form.distrito_id ? Object.fromEntries(
+          Object.entries(form.geografia).filter(([key, value]) => key.endsWith('_id') && value).map(([key, value]) => [key, Number(value)])
+        ) : undefined,
       });
 
-      if (typeof onOcorrenciaCriada === 'function') {
-        onOcorrenciaCriada(respostaApi);
-      } else if (typeof onCreated === 'function') {
-        onCreated(respostaApi);
-      }
-    } catch (err) {
-      if (err instanceof ValidationError) {
-        setFieldErrors(err.errors);
-        if (err.errors.tipo) setSec('A');
-        else if (err.errors.titulo || err.errors.descricao) setSec('B');
-        else if (err.errors.localizacao || err.errors.provincia || err.errors.distrito) setSec('C');
-        toast.error(err.message || 'Verifique os dados assinalados.');
-      } else if (err instanceof NetworkError || err.isNetworkError) {
-        // [RNF12] Preserva formulário e exibe mensagem oficial
+      setSubmitted(occurrence);
+      await onCreated?.(occurrence);
+      toast.success('Ocorrência comunicada com sucesso.');
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        const mappedErrors = mapValidationErrors(error.errors);
+        setFieldErrors(mappedErrors);
+        setSection(mappedErrors.tipo ? 'A' : mappedErrors.titulo || mappedErrors.descricao ? 'B' : 'C');
+        toast.error(error.message || 'Verifique os dados assinalados.');
+      } else if (error instanceof NetworkError || error.isNetworkError) {
         toast.error('Sem ligação. Os seus dados foram mantidos.');
       } else {
-        toast.error(err.message || 'Erro ao submeter ocorrência.');
+        toast.error(error.message || 'Erro ao submeter ocorrência.');
       }
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const reset = () => {
+    setSubmitted(null);
+    setForm(EMPTY_FORM);
+    setFieldErrors({});
+    setSection('A');
+  };
+
+  const locationValue = {
+    lat: form.lat === '' ? null : Number(form.lat),
+    lng: form.lng === '' ? null : Number(form.lng),
+  };
+
   if (submitted) {
     return (
-      <div className="max-w-2xl mx-auto space-y-4">
-        <Card className="p-8 text-center animate-in fade-in zoom-in-95 duration-200">
+      <div className="max-w-2xl mx-auto">
+        <Card className="p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-950/50 text-green-600 dark:text-green-300 mx-auto flex items-center justify-center">
             <Icon name="CheckCircle" size={32} />
           </div>
           <h2 className="text-xl font-bold text-ink dark:text-dink mt-4">Ocorrência submetida</h2>
           <p className="text-sm text-muted dark:text-dmuted mt-1">
-            A sua comunicação foi recebida pelo sistema e será analisada pelas entidades responsáveis.
+            A comunicação foi persistida e aguarda avaliação pelas entidades responsáveis.
           </p>
-
           <div className="mt-6 p-4 rounded-lg bg-light dark:bg-dsidebar/40 text-left space-y-2 border border-bd dark:border-dborder">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted dark:text-dmuted">Referência única</span>
-              <span className="font-mono font-semibold text-brand dark:text-dblue">{submitted.ref}</span>
+            <div className="flex justify-between gap-4 text-sm">
+              <span className="text-muted dark:text-dmuted">Identificador</span>
+              <span className="font-mono font-semibold text-brand dark:text-dblue">#{submitted.id}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted dark:text-dmuted">Data e hora</span>
-              <span className="text-ink dark:text-dink">{submitted.data}</span>
+            <div className="flex justify-between gap-4 text-sm">
+              <span className="text-muted dark:text-dmuted">Registada em</span>
+              <span className="text-ink dark:text-dink">{submitted.created_at ? new Date(submitted.created_at).toLocaleString('pt-MZ') : 'Registada'}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted dark:text-dmuted">Tipo de emergência</span>
-              <span className="text-ink dark:text-dink font-medium">{submitted.tipo}</span>
+            <div className="flex justify-between gap-4 text-sm">
+              <span className="text-muted dark:text-dmuted">Tipo</span>
+              <span className="text-ink dark:text-dink">{submitted.tipo_ocorrencia?.nome}</span>
             </div>
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between gap-4 text-sm">
               <span className="text-muted dark:text-dmuted">Prioridade</span>
               <span className="text-amber-600 dark:text-amber-400 font-semibold">Por avaliar</span>
             </div>
           </div>
-
-          <div className="mt-4 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-xs text-amber-900 dark:text-amber-100 text-left">
-            <strong>Nota:</strong> A submissão será sujeita a análise. Este envio <strong>não representa confirmação</strong> de que uma equipa foi mobilizada.
-          </div>
-
+          <p className="mt-4 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-xs text-amber-900 dark:text-amber-100 text-left">
+            O registo não confirma a mobilização de uma equipa nem garante assistência imediata.
+          </p>
           <div className="mt-6 flex gap-2 justify-center flex-wrap">
             <Button icon="Eye" onClick={() => setPage('minhas-ocorrencias')}>Acompanhar ocorrência</Button>
-            <Button 
-              variant="secondary" 
-              onClick={() => { 
-                setSubmitted(null); 
-                setForm({
-                  tipo: '',
-                  titulo: '',
-                  descricao: '',
-                  data: new Date().toISOString().slice(0, 16),
-                  provincia: 'Sofala',
-                  distrito: '',
-                  localidade: '',
-                  endereco: '',
-                  lat: '',
-                  lng: '',
-                  descricaoEvidencias: '',
-                  confirmed: false,
-                });
-                setSec('A'); 
-              }}
-            >
-              Nova comunicação
-            </Button>
+            <Button variant="secondary" onClick={reset}>Nova comunicação</Button>
           </div>
         </Card>
       </div>
     );
   }
 
-  const locObj = {
-    lat: form.lat !== '' ? Number(form.lat) : null,
-    lng: form.lng !== '' ? Number(form.lng) : null,
-  };
-
   return (
     <div className="max-w-4xl mx-auto space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-ink dark:text-dink">Comunicar uma Ocorrência</h1>
         <p className="text-sm text-muted dark:text-dmuted mt-1">
-          Forneça informações claras para ajudar as entidades responsáveis a compreender e avaliar a situação.
+          Forneça informações claras para ajudar as entidades responsáveis a compreender a situação.
         </p>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {secs.map((s, i) => (
-          <button 
-            key={s.id} 
+        {SECTIONS.map((item, index) => (
+          <button
+            key={item.id}
             type="button"
-            onClick={() => setSec(s.id)}
+            onClick={() => setSection(item.id)}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
-              sec === s.id 
-                ? 'bg-brand text-white font-medium' 
+              section === item.id
+                ? 'bg-brand text-white font-medium'
                 : 'bg-white dark:bg-dcard border border-bd dark:border-dborder text-ink dark:text-dink'
             }`}
           >
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${
-              sec === s.id ? 'bg-white/20' : 'bg-lblue dark:bg-dsidebar text-brand dark:text-dblue font-semibold'
-            }`}>
-              {i + 1}
-            </span>
-            <span>{s.label}</span>
+            <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs">{index + 1}</span>
+            <span>{item.label}</span>
           </button>
         ))}
       </div>
 
-      <Card className="p-6 space-y-5">
-        {sec === 'A' && (
-          <Field 
-            label="Seleccione o tipo de ocorrência" 
-            required 
-            hint="Escolha a opção que melhor descreve a situação observada."
-            error={fieldErrors.tipo}
-            errorTestId="tipo-error"
-          >
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-              {tipos.map(t => (
-                <button 
-                  key={t.id} 
-                  type="button"
-                  data-testid={`cid-tipo-${t.id}`}
-                  onClick={() => handleChange('tipo', t.id)}
-                  aria-pressed={form.tipo === t.id}
-                  className={`p-3 rounded-lg border-2 flex flex-col items-start gap-1.5 transition-all text-left ${
-                    form.tipo === t.id 
-                      ? 'border-brand bg-lblue/50 dark:bg-dblue/10 shadow-sm' 
-                      : 'border-bd dark:border-dborder hover:border-brand/50'
-                  }`}
-                >
-                  <Icon name={t.icon} size={22} className={t.color} />
-                  <span className="text-xs font-semibold text-ink dark:text-dink">{t.label}</span>
-                </button>
-              ))}
-            </div>
-          </Field>
-        )}
-
-        {sec === 'B' && (
-          <>
-            <Field 
-              label="Título / descrição resumida" 
-              required 
-              hint="Ex: Água a subir na rua principal (entre 5 e 100 caracteres)"
-              htmlFor="cid-titulo"
-              error={fieldErrors.titulo}
-              errorTestId="titulo-error"
-            >
-              <input 
-                id="cid-titulo"
-                data-testid="cid-titulo"
-                value={form.titulo}
-                onChange={e => handleChange('titulo', e.target.value)}
-                aria-invalid={Boolean(fieldErrors.titulo)}
-                className={inputCls} 
-                placeholder="Resumo curto da situação" 
-              />
-            </Field>
-
-            <Field 
-              label="Descrição detalhada" 
-              required 
-              hint="Inclua o que observou, extensão aparente, se há pessoas em risco, etc. (10 a 1000 caracteres)"
-              htmlFor="cid-descricao"
-              error={fieldErrors.descricao}
-              errorTestId="descricao-error"
-            >
-              <textarea 
-                rows={5} 
-                id="cid-descricao"
-                data-testid="cid-descricao"
-                value={form.descricao}
-                onChange={e => handleChange('descricao', e.target.value)}
-                aria-invalid={Boolean(fieldErrors.descricao)}
-                className={inputCls} 
-                placeholder="Descreva a situação com o máximo de detalhe possível..." 
-              />
-            </Field>
-
-            <Field 
-              label="Data e hora em que observou a situação" 
-              htmlFor="cid-data"
-              error={fieldErrors.data}
-              errorTestId="data-error"
-            >
-              <input 
-                type="datetime-local" 
-                id="cid-data"
-                data-testid="cid-data"
-                value={form.data}
-                onChange={e => handleChange('data', e.target.value)}
-                aria-invalid={Boolean(fieldErrors.data)}
-                className={inputCls} 
-              />
-            </Field>
-          </>
-        )}
-
-        {sec === 'C' && (
-          <>
-            {fieldErrors.localizacao && (
-              <div 
-                role="alert" 
-                data-testid="localizacao-error"
-                className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-300 font-medium"
-              >
-                {fieldErrors.localizacao}
-              </div>
-            )}
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <Field 
-                label="Província" 
-                required 
-                htmlFor="cid-provincia"
-                error={fieldErrors.provincia}
-                errorTestId="provincia-error"
-              >
-                <select 
-                  id="cid-provincia"
-                  data-testid="cid-provincia"
-                  value={form.provincia}
-                  onChange={e => handleChange('provincia', e.target.value)}
-                  className={inputCls}
-                >
-                  {['Maputo', 'Gaza', 'Inhambane', 'Sofala', 'Manica', 'Tete', 'Zambézia', 'Nampula', 'Niassa', 'Cabo Delgado'].map(p => (
-                    <option key={p} value={p}>{p}</option>
+      <form onSubmit={submit}>
+        <Card className="p-6 space-y-5">
+          {section === 'A' && (
+            <Field label="Seleccione o tipo de ocorrência" required error={fieldErrors.tipo}>
+              {typesError ? (
+                <p role="alert" className="text-sm text-red-700 dark:text-red-300">{typesError}</p>
+              ) : types.length === 0 ? (
+                <p className="text-sm text-muted dark:text-dmuted">Não existem tipos activos disponíveis para registo.</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                  {types.map((type, index) => (
+                    <button
+                      key={type.id}
+                      type="button"
+                      data-testid={`cid-tipo-${type.id}`}
+                      onClick={() => setField('tipo', String(type.id))}
+                      aria-pressed={form.tipo === String(type.id)}
+                      className={`p-3 rounded-lg border-2 flex flex-col items-start gap-1.5 transition-all text-left ${
+                        form.tipo === String(type.id)
+                          ? 'border-brand bg-lblue/50 dark:bg-dblue/10 shadow-sm'
+                          : 'border-bd dark:border-dborder hover:border-brand/50'
+                      }`}
+                    >
+                      <Icon name={TYPE_ICONS[index % TYPE_ICONS.length]} size={22} className="text-brand dark:text-dblue" />
+                      <span className="text-xs font-semibold text-ink dark:text-dink">{type.nome}</span>
+                    </button>
                   ))}
-                </select>
-              </Field>
-
-              <Field 
-                label="Distrito" 
-                required 
-                htmlFor="cid-distrito"
-                error={fieldErrors.distrito}
-                errorTestId="distrito-error"
-              >
-                <input 
-                  id="cid-distrito"
-                  data-testid="cid-distrito"
-                  value={form.distrito}
-                  onChange={e => handleChange('distrito', e.target.value)}
-                  aria-invalid={Boolean(fieldErrors.distrito)}
-                  className={inputCls} 
-                  placeholder="Ex: Beira" 
-                />
-              </Field>
-
-              <Field label="Localidade" htmlFor="cid-localidade">
-                <input 
-                  id="cid-localidade"
-                  data-testid="cid-localidade"
-                  value={form.localidade}
-                  onChange={e => handleChange('localidade', e.target.value)}
-                  className={inputCls} 
-                  placeholder="Ex: Macurungo" 
-                />
-              </Field>
-
-              <Field label="Endereço / ponto de referência" htmlFor="cid-endereco">
-                <input 
-                  id="cid-endereco"
-                  data-testid="cid-endereco"
-                  value={form.endereco}
-                  onChange={e => handleChange('endereco', e.target.value)}
-                  className={inputCls} 
-                  placeholder="Ex: Próximo à escola primária" 
-                />
-              </Field>
-            </div>
-            
-            <div className="flex flex-wrap gap-2 items-center pt-2">
-              <Button variant="secondary" icon="Navigation" onClick={usarLocalizacao} disabled={geoLoading}>
-                {geoLoading ? 'A obter coordenadas...' : 'Usar a minha localização GPS'}
-              </Button>
-              {form.lat && form.lng && (
-                <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1 font-medium">
-                  <Icon name="CheckCircle" size={14} /> Localização obtida ({Number(form.lat).toFixed(4)}, {Number(form.lng).toFixed(4)})
-                </span>
+                </div>
               )}
-            </div>
-            <p className="text-xs text-muted dark:text-dmuted">
-              A localização só será obtida após a sua autorização explícita. Pode também clicar no mapa para marcar o local.
-            </p>
-
-            <Field label="Localização no mapa" hint="Clique no mapa para marcar a localização exacta (opcional)">
-              <div className="h-64 rounded-xl overflow-hidden mt-2">
-                <LocationPicker 
-                  value={locObj} 
-                  onChange={handleLocationPick} 
-                  height={256} 
-                />
-              </div>
             </Field>
+          )}
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <Field 
-                label="Latitude" 
-                htmlFor="cid-lat"
-                error={fieldErrors.coordenadas}
-                errorTestId="coordenadas-error"
+          {section === 'B' && (
+            <>
+              <Field
+                label="Título / descrição resumida"
+                required
+                hint="Escreva um resumo curto (5 a 100 caracteres)."
+                htmlFor="cid-titulo"
+                error={fieldErrors.titulo}
+                errorTestId="titulo-error"
               >
-                <input 
-                  type="number" 
-                  step="0.0001" 
-                  id="cid-lat"
-                  data-testid="cid-lat"
-                  value={form.lat} 
-                  onChange={e => handleChange('lat', e.target.value)} 
-                  className={inputCls} 
+                <input
+                  id="cid-titulo"
+                  data-testid="cid-titulo"
+                  value={form.titulo}
+                  onChange={event => setField('titulo', event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.titulo)}
+                  className={inputCls}
+                  maxLength={100}
+                  required
                 />
               </Field>
-              <Field label="Longitude" htmlFor="cid-lng">
-                <input 
-                  type="number" 
-                  step="0.0001" 
-                  id="cid-lng"
-                  data-testid="cid-lng"
-                  value={form.lng} 
-                  onChange={e => handleChange('lng', e.target.value)} 
-                  className={inputCls} 
+              <Field
+                label="Descrição detalhada"
+                required
+                hint="Descreva o que observou (10 a 1000 caracteres)."
+                htmlFor="cid-descricao"
+                error={fieldErrors.descricao}
+                errorTestId="descricao-error"
+              >
+                <textarea
+                  id="cid-descricao"
+                  data-testid="cid-descricao"
+                  rows={5}
+                  value={form.descricao}
+                  onChange={event => setField('descricao', event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.descricao)}
+                  className={inputCls}
+                  maxLength={1000}
+                  required
                 />
               </Field>
+            </>
+          )}
+
+          {section === 'C' && (
+            <>
+              {fieldErrors.localizacao && (
+                <div role="alert" data-testid="localizacao-error" className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-300">
+                  {fieldErrors.localizacao}
+                </div>
+              )}
+              <GeographicComboboxes required value={form.geografia} errors={fieldErrors} onChange={geografia => {
+                setForm(current => ({ ...current, geografia, provincia_id: geografia.provincia_id, distrito_id: geografia.distrito_id, provincia: geografia.provincia || '', distrito: geografia.distrito || '', endereco: geografia.endereco_referencia || current.endereco }));
+                setFieldErrors(current => { const next = { ...current }; Object.keys(next).filter(key => key.endsWith('_id') || key === 'localizacao').forEach(key => delete next[key]); return next; });
+              }} />
+              <div className="flex flex-wrap gap-2 items-center pt-2">
+                <Button type="button" variant="secondary" icon="Navigation" onClick={getDeviceLocation} disabled={geoLoading}>
+                  {geoLoading ? 'A obter coordenadas…' : 'Usar a minha localização GPS'}
+                </Button>
+                {form.lat && form.lng && (
+                  <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1 font-medium">
+                    <Icon name="CheckCircle" size={14} /> {Number(form.lat).toFixed(4)}, {Number(form.lng).toFixed(4)}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted dark:text-dmuted">
+                As coordenadas só são obtidas após a sua autorização explícita. Pode marcar o local no mapa ou preencher a localização textual.
+              </p>
+              <Field label="Localização no mapa" hint="Clique no mapa para marcar o local exacto (opcional).">
+                <div className="h-64 rounded-xl overflow-hidden mt-2">
+                  <LocationPicker value={locationValue} onChange={coords => { setCoordinates(coords.lat, coords.lng); if (coords.label) setField('endereco', coords.label); }} height={256} />
+                </div>
+              </Field>
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field label="Latitude" htmlFor="cid-lat" error={fieldErrors.latitude || fieldErrors.coordenadas}>
+                  <input type="number" step="any" id="cid-lat" data-testid="cid-lat" value={form.lat} onChange={event => setField('lat', event.target.value)} className={inputCls} />
+                </Field>
+                <Field label="Longitude" htmlFor="cid-lng" error={fieldErrors.longitude}>
+                  <input type="number" step="any" id="cid-lng" data-testid="cid-lng" value={form.lng} onChange={event => setField('lng', event.target.value)} className={inputCls} />
+                </Field>
+              </div>
+            </>
+          )}
+
+          {section === 'D' && (
+            <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-lblue/40 dark:bg-dblue/10 p-4">
+              <h2 className="font-semibold text-ink dark:text-dink">Evidências</h2>
+              <p className="mt-2 text-sm text-muted dark:text-dmuted">
+                Depois de registar a ocorrência, poderá anexar imagens JPG/PNG ou PDF (até 10 MB por ficheiro) na página de detalhes.
+                Não coloque a sua segurança em risco para obter evidências.
+              </p>
             </div>
-          </>
-        )}
+          )}
 
-        {sec === 'D' && (
-          <>
-            <Field label="Fotografias" hint="Formatos aceites: JPG, PNG. Tamanho máximo: 10MB por ficheiro. Não é obrigatório — não coloque a sua segurança em risco para obter fotografias.">
-              <div className="border-2 border-dashed border-bd dark:border-dborder rounded-lg p-8 text-center mt-2 hover:border-brand/50 transition-colors">
-                <Icon name="Camera" size={32} className="mx-auto text-muted dark:text-dmuted mb-2" />
-                <p className="text-sm text-ink dark:text-dink font-medium">Clique ou arraste fotografias para aqui</p>
-                <p className="text-xs text-muted dark:text-dmuted mt-1">(opcional)</p>
+          {section === 'E' && (
+            <>
+              <div className="p-4 rounded-lg bg-lblue dark:bg-dblue/10 space-y-2 border border-blue-200 dark:border-blue-900/30">
+                <p className="text-sm font-semibold text-ink dark:text-dink">Conta utilizada para esta comunicação</p>
+                <div className="flex items-center gap-2 text-sm text-ink dark:text-dink">
+                  <Icon name="User" size={14} className="text-muted dark:text-dmuted" /> {user.name}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-ink dark:text-dink">
+                  <Icon name="Mail" size={14} className="text-muted dark:text-dmuted" /> {user.email}
+                </div>
               </div>
-            </Field>
-            <Field label="Documentos" hint="Ex: PDF, DOC. Tamanho máximo: 10MB.">
-              <button type="button" className="flex items-center gap-2 px-3 py-2 border border-bd dark:border-bd dark:border-dborder rounded-lg text-sm text-ink dark:text-dink hover:bg-light dark:hover:bg-dsidebar transition-colors">
-                <Icon name="Paperclip" size={16} /> Anexar documento
-              </button>
-            </Field>
-            <Field label="Descrição das evidências anexadas" htmlFor="cid-evidencias">
-              <textarea 
-                rows={3} 
-                id="cid-evidencias"
-                value={form.descricaoEvidencias}
-                onChange={e => handleChange('descricaoEvidencias', e.target.value)}
-                className={inputCls} 
-                placeholder="Notas adicionais sobre as imagens ou vídeos..." 
-              />
-            </Field>
-          </>
-        )}
-
-        {sec === 'E' && (
-          <>
-            <div className="p-4 rounded-lg bg-lblue dark:bg-dblue/10 space-y-2 border border-blue-200 dark:border-blue-900/30">
-              <p className="text-sm font-semibold text-ink dark:text-dink">Os seus dados de contacto associados</p>
-              <div className="flex items-center gap-2 text-sm text-ink dark:text-dink">
-                <Icon name="Mail" size={14} className="text-muted dark:text-dmuted" /> {USERS.cidadao.email}
-              </div>
-              <div className="flex items-center gap-2 text-sm text-ink dark:text-dink">
-                <Icon name="Phone" size={14} className="text-muted dark:text-dmuted" /> {USERS.cidadao.telefone}
-              </div>
-            </div>
-
-            <div className="space-y-3 pt-2">
               <label className="flex items-start gap-3 cursor-pointer">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   id="cid-confirm"
                   data-testid="cid-confirm"
                   checked={form.confirmed}
-                  onChange={e => handleChange('confirmed', e.target.checked)}
+                  onChange={event => setField('confirmed', event.target.checked)}
                   aria-invalid={Boolean(fieldErrors.confirm)}
-                  className="mt-1 w-4 h-4 rounded border-bd text-brand focus:ring-brand" 
+                  className="mt-1 w-4 h-4 rounded border-bd text-brand focus:ring-brand"
                 />
                 <span className="text-sm text-ink dark:text-dink">
-                  Confirmo que as informações prestadas são verdadeiras e correspondem ao que observei pessoalmente.
+                  Confirmo que as informações prestadas são verdadeiras e correspondem ao que observei.
                 </span>
               </label>
-              {fieldErrors.confirm && (
-                <p role="alert" data-testid="confirm-error" className="text-xs text-red-600 ml-7">
-                  {fieldErrors.confirm}
-                </p>
-              )}
-            </div>
-
-            <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs text-muted dark:text-dmuted">
-              <strong>Aviso legal:</strong> A comunicação falsa de emergências é punível por lei nos termos do Código Penal de Moçambique.
-            </div>
-          </>
-        )}
-      </Card>
-
-      <div className="flex gap-2 justify-between">
-        <Button 
-          variant="secondary" 
-          disabled={sec === 'A' || isSubmitting} 
-          onClick={() => {
-            const idx = secs.findIndex(s => s.id === sec);
-            if (idx > 0) setSec(secs[idx - 1].id);
-          }}
-        >
-          Anterior
-        </Button>
-
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setPage('dashboard')} disabled={isSubmitting}>Cancelar</Button>
-          {sec !== 'E' ? (
-            <Button 
-              onClick={() => {
-                const idx = secs.findIndex(s => s.id === sec);
-                if (idx < secs.length - 1) setSec(secs[idx + 1].id);
-              }}
-            >
-              Seguinte
-            </Button>
-          ) : (
-            <Button 
-              icon="CheckCircle" 
-              id="cid-submit"
-              data-testid="cid-submit"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'A submeter...' : 'Submeter ocorrência'}
-            </Button>
+              {fieldErrors.confirm && <p role="alert" data-testid="confirm-error" className="text-xs text-red-600">{fieldErrors.confirm}</p>}
+              <p className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs text-muted dark:text-dmuted">
+                A comunicação não confirma a mobilização de equipas. Em perigo imediato, contacte os serviços de emergência competentes.
+              </p>
+            </>
           )}
+        </Card>
+
+        <div className="mt-4 flex gap-2 justify-between">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={section === 'A' || isSubmitting}
+            onClick={() => setSection(SECTIONS[Math.max(0, SECTIONS.findIndex(item => item.id === section) - 1)].id)}
+          >
+            Anterior
+          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" onClick={() => setPage('dashboard')} disabled={isSubmitting}>Cancelar</Button>
+            {section !== 'E' ? (
+              <Button
+                type="button"
+                onClick={() => setSection(SECTIONS[Math.min(SECTIONS.length - 1, SECTIONS.findIndex(item => item.id === section) + 1)].id)}
+              >
+                Seguinte
+              </Button>
+            ) : (
+              <Button type="submit" icon="CheckCircle" id="cid-submit" data-testid="cid-submit" disabled={isSubmitting || !types.length}>
+                {isSubmitting ? 'A submeter…' : 'Submeter ocorrência'}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

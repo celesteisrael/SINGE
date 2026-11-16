@@ -11,9 +11,14 @@ class UpdateMissaoRequest extends SingeFormRequest
 {
     public function authorize(): bool
     {
+        $perfisPermitidos = ['Administrador', 'Coordenador'];
+        if ($this->route()?->getActionMethod() === 'updateState') {
+            $perfisPermitidos[] = 'Agente';
+        }
+
         return parent::authorize()
             && $this->route('missao') !== null
-            && $this->userHasAnyProfile(['Administrador', 'Coordenador']);
+            && $this->userHasAnyProfile($perfisPermitidos);
     }
 
     /** @return array<string, mixed> */

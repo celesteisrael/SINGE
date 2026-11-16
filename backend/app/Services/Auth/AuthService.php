@@ -4,6 +4,7 @@ namespace App\Services\Auth;
 
 use App\Models\Perfil;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -80,5 +81,20 @@ class AuthService
     public function obterUtilizadorAutenticado(User $utilizador): User
     {
         return $utilizador->load('perfil', 'equipa', 'localizacao');
+    }
+
+    /** @param array{name?: string, email?: string} $dados */
+    public function atualizarPerfilCidadao(array $dados, User $utilizador): User
+    {
+        if ($utilizador->perfil?->nome !== 'Cidadão') {
+            throw new AuthorizationException('Só o titular com perfil Cidadão pode actualizar estes dados pessoais.');
+        }
+
+        $utilizador->fill(array_intersect_key($dados, array_flip(['name', 'email'])));
+        $utilizador->save();
+
+        $utilizador->refresh();
+
+        return $utilizador->load('perfil', 'localizacao');
     }
 }

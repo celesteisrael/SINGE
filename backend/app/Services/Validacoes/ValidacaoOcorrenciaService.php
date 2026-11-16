@@ -23,6 +23,8 @@ class ValidacaoOcorrenciaService
         'DUPLICADA',
     ];
 
+    private const ESTADOS_OPERADOR = ['VALIDADA', 'NAO_CONFIRMADA', 'REJEITADA'];
+
     /** @param array<string, mixed> $dados */
     public function criar(array $dados, User $utilizador): ValidacaoOcorrencia
     {
@@ -36,6 +38,10 @@ class ValidacaoOcorrenciaService
         $estado = strtoupper((string) ($dados['estado'] ?? 'PENDENTE'));
         if (! in_array($estado, self::ESTADOS, true)) {
             throw new InvalidArgumentException('O estado da validação de ocorrência é inválido.');
+        }
+        if ($this->nomePerfil($utilizador) === 'Operador'
+            && ! in_array($estado, self::ESTADOS_OPERADOR, true)) {
+            throw new AuthorizationException('O Operador só pode validar, não confirmar ou rejeitar uma ocorrência.');
         }
 
         if (in_array($estado, ['NAO_CONFIRMADA', 'REJEITADA'], true)
@@ -104,5 +110,12 @@ class ValidacaoOcorrenciaService
         if (! $perfil instanceof Perfil || ! in_array($perfil->nome, self::PERFIS_VALIDADORES, true)) {
             throw new AuthorizationException('O perfil do utilizador não pode validar ocorrências.');
         }
+    }
+
+    private function nomePerfil(User $utilizador): ?string
+    {
+        $perfil = $utilizador->perfil;
+
+        return $perfil instanceof Perfil ? $perfil->nome : null;
     }
 }

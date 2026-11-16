@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useState, useLayoutEffect } from 'react';
 
 const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
+  const [accountId, setAccountIdState] = useState('anonymous');
   const [theme, setTheme] = useState(() => {
-    const savedTheme = localStorage.getItem('singe_theme');
+    const savedTheme = localStorage.getItem('singe_theme:anonymous');
     if (savedTheme) {
       return savedTheme;
     }
@@ -12,15 +13,28 @@ export const ThemeProvider = ({ children }) => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     if (theme === 'dark') {
       root.classList.add('dark');
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('singe_theme', theme);
-  }, [theme]);
+    localStorage.setItem(`singe_theme:${accountId}`, theme);
+  }, [theme, accountId]);
+
+  const setAccountId = useCallback(id => {
+    const nextId = id == null ? 'anonymous' : `user-${id}`;
+    setAccountIdState(nextId);
+    const savedTheme = localStorage.getItem(`singe_theme:${nextId}`);
+    const anonymousPreference = localStorage.getItem('singe_theme:anonymous');
+    const nextTheme = savedTheme || anonymousPreference
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    if (nextId !== 'anonymous') {
+      localStorage.removeItem('singe_theme:anonymous');
+    }
+    setTheme(nextTheme);
+  }, []);
 
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
@@ -29,7 +43,7 @@ export const ThemeProvider = ({ children }) => {
   const isDark = theme === 'dark';
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, toggle: toggleTheme, setTheme, isDark }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, toggle: toggleTheme, setTheme, setAccountId, isDark }}>
       {children}
     </ThemeContext.Provider>
   );

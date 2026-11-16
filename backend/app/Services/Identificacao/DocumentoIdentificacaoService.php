@@ -156,7 +156,7 @@ class DocumentoIdentificacaoService
     public function podeAceder(DocumentoIdentificacao $documento, User $utilizador): bool
     {
         return (int) $documento->utilizador_id === (int) $utilizador->id
-            || $this->nomePerfil($utilizador) === 'Administrador';
+            || $this->nomePerfil($utilizador) === 'Operador';
     }
 
     private function autorizarEdicao(DocumentoIdentificacao $documento, User $utilizador): void

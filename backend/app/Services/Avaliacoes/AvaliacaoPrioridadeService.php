@@ -11,6 +11,7 @@ use App\Models\Prioridade;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -18,7 +19,7 @@ use RuntimeException;
 
 class AvaliacaoPrioridadeService
 {
-    private const PERFIS_AVALIADORES = ['Administrador', 'Operador', 'Coordenador'];
+    private const PERFIS_AVALIADORES = ['Administrador', 'Coordenador'];
 
     /**
      * @var array<string, float>
@@ -120,6 +121,25 @@ class AvaliacaoPrioridadeService
             ?? throw new RuntimeException("A prioridade '{$nome}' não está configurada.");
     }
 
+    /** @return EloquentCollection<int, FatorPrioridade> */
+    public function listarFatoresAtivos(): EloquentCollection
+    {
+        $fatores = FatorPrioridade::query()->where('ativo', true)->orderBy('id')->get();
+        $this->validarConfiguracaoDosFatores($fatores->keyBy('id'));
+
+        return $fatores;
+    }
+
+    /** @return EloquentCollection<int, AvaliacaoPrioridade> */
+    public function listarAvaliacoes(?int $ocorrenciaId = null): EloquentCollection
+    {
+        return AvaliacaoPrioridade::query()
+            ->with(['prioridade', 'utilizador', 'detalhes'])
+            ->when($ocorrenciaId !== null, fn ($query) => $query->where('ocorrencia_id', $ocorrenciaId))
+            ->latest()
+            ->get();
+    }
+
     /** @param array<string, mixed> $dados */
     public function avaliar(array $dados, User $utilizador): AvaliacaoPrioridade
     {
@@ -188,8 +208,11 @@ class AvaliacaoPrioridadeService
                 $detalhe->forceFill([
                     'avaliacao_prioridade_id' => $avaliacao->id,
                     'fator_prioridade_id' => $id,
+                    'fator_nome_snapshot' => $fator->nome,
+                    'fator_descricao_snapshot' => $fator->descricao,
                     'pontuacao' => (float) $factor['pontuacao'],
                     'peso_aplicado' => (float) $fator->peso,
+                    'contribuicao_ponderada' => round((float) $factor['pontuacao'] * (float) $fator->peso, 2),
                     'observacao' => $factor['observacao'] ?? null,
                 ]);
                 $detalhe->save();

@@ -12,8 +12,11 @@ class DetalheAvaliacao extends Model
     protected $fillable = [
         'avaliacao_prioridade_id',
         'fator_prioridade_id',
+        'fator_nome_snapshot',
+        'fator_descricao_snapshot',
         'pontuacao',
         'peso_aplicado',
+        'contribuicao_ponderada',
         'observacao',
     ];
 
@@ -22,6 +25,7 @@ class DetalheAvaliacao extends Model
         return [
             'pontuacao' => 'decimal:2',
             'peso_aplicado' => 'decimal:2',
+            'contribuicao_ponderada' => 'decimal:2',
         ];
     }
 

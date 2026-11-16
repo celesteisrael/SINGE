@@ -19,7 +19,7 @@ use InvalidArgumentException;
 
 class LocalizacaoService
 {
-    private const PERFIS_GESTAO = ['Administrador', 'Operador', 'Coordenador'];
+    private const PERFIS_GESTAO = ['Administrador', 'Coordenador'];
 
     /** @param array<string, mixed> $dados */
     public function criar(array $dados, User $utilizador): Localizacao

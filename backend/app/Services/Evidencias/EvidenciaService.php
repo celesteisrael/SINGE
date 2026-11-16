@@ -7,6 +7,7 @@ use App\Models\Ocorrencia;
 use App\Models\Perfil;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -71,6 +72,14 @@ class EvidenciaService
     public function create(array $dados, User $utilizador): Evidencia
     {
         return $this->criar($dados, $utilizador);
+    }
+
+    /** @return Collection<int, Evidencia> */
+    public function listarDaOcorrencia(Ocorrencia $ocorrencia, User $utilizador): Collection
+    {
+        $this->autorizarAcesso($ocorrencia, $utilizador);
+
+        return $ocorrencia->evidencias()->latest()->get();
     }
 
     public function descarregar(Evidencia $evidencia, User $utilizador): StreamedResponse

@@ -9,12 +9,12 @@ use Illuminate\Validation\Rule;
 
 class UpdateOcorrenciaRequest extends SingeFormRequest
 {
-    private const PERFIS_OPERACIONAIS = ['Administrador', 'Operador', 'Coordenador'];
+    private const PERFIS_GESTORES = ['Administrador', 'Coordenador'];
 
     /** @return array<string, mixed> */
     public function rules(): array
     {
-        $isOperator = $this->userHasAnyProfile(self::PERFIS_OPERACIONAIS);
+        $isManager = $this->userHasAnyProfile(self::PERFIS_GESTORES);
 
         return [
             'titulo' => ['sometimes', 'required', 'string', 'max:150'],
@@ -24,7 +24,7 @@ class UpdateOcorrenciaRequest extends SingeFormRequest
             'tipo_ocorrencia_id' => ['sometimes', 'required', 'integer', 'exists:tipos_ocorrencia,id'],
             'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
-            'estado' => $isOperator
+            'estado' => $isManager
                 ? ['sometimes', 'required', Rule::enum(EstadoOcorrencia::class)]
                 : ['prohibited'],
             'prioridade_id' => ['prohibited'],
@@ -40,7 +40,7 @@ class UpdateOcorrenciaRequest extends SingeFormRequest
             && $ocorrencia instanceof Ocorrencia
             && (
                 (int) $ocorrencia->utilizador_id === (int) $this->user()->getAuthIdentifier()
-                || $this->userHasAnyProfile(self::PERFIS_OPERACIONAIS)
+                || $this->userHasAnyProfile(self::PERFIS_GESTORES)
             );
     }
 

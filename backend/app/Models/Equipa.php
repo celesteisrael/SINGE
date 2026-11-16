@@ -3,12 +3,17 @@
 namespace App\Models;
 
 use App\Enums\EstadoEquipa;
+use Database\Factories\EquipaFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Equipa extends Model
 {
+    /** @use HasFactory<EquipaFactory> */
+    use HasFactory;
+
     protected $table = 'equipas';
 
     protected $fillable = [

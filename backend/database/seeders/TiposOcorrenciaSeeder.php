@@ -30,6 +30,10 @@ class TiposOcorrenciaSeeder extends Seeder
                 'nome' => 'Deslizamento de terra',
                 'descricao' => 'Deslizamentos e movimentos de terras.',
             ],
+            [
+                'nome' => 'Ciclone',
+                'descricao' => 'Ciclones tropicais e fenómenos meteorológicos severos.',
+            ],
         ];
 
         foreach ($tipos as $tipo) {

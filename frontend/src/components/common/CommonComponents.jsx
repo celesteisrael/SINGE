@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { cloneElement, isValidElement } from 'react';
 import Icon from './Icon';
 
 export const PRIO_MAP = {
@@ -11,6 +11,10 @@ export const PRIO_MAP = {
 export const EST_MAP = {
   'Nova': 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300',
   'Em análise': 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+  'Pendente': 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+  'Aprovada': 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300',
+  'Rejeitada': 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300',
+  'Correcção solicitada': 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300',
   'Validada': 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300',
   'Em resposta': 'bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300',
   'Em curso': 'bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300',
@@ -125,24 +129,30 @@ export const ConfirmModal = ({ open, onClose, onConfirm, title, description, dan
   );
 };
 
-export const Field = ({ label, children, required, hint, error, errorTestId, htmlFor }) => (
-  <label className="block" htmlFor={htmlFor}>
-    <span className="block text-sm font-medium text-ink dark:text-dink mb-1.5">
-      {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-    </span>
-    {children}
-    {hint && <span className="block text-xs text-muted dark:text-dmuted mt-1">{hint}</span>}
-    {error && (
-      <span 
-        role="alert" 
-        data-testid={errorTestId || (htmlFor ? `${htmlFor}-error` : undefined)} 
-        className="block text-xs text-red-600 mt-1"
-      >
-        {error}
+export const Field = ({ label, children, required, hint, error, errorTestId, htmlFor }) => {
+  const errorId = errorTestId || (htmlFor ? `${htmlFor}-error` : undefined);
+  const childRequired = React.Children.toArray(children).some(child => isValidElement(child) && child.props.required);
+  const controls = React.Children.map(children, child => {
+    if (!error || !isValidElement(child) || typeof child.type !== 'string' || !['input', 'select', 'textarea'].includes(child.type)) return child;
+    const describedBy = [child.props['aria-describedby'], errorId].filter(Boolean).join(' ') || undefined;
+    return cloneElement(child, {
+      'aria-invalid': true,
+      'aria-describedby': describedBy,
+      className: `${child.props.className || ''} border-red-500 focus:border-red-600 focus:ring-red-500/30`,
+    });
+  });
+
+  return (
+    <label className="block" htmlFor={htmlFor}>
+      <span className="block text-sm font-medium text-ink dark:text-dink mb-1.5">
+        {label}{(required || childRequired) && <span aria-hidden="true" className="text-red-500 ml-0.5">*</span>}
       </span>
-    )}
-  </label>
-);
+      {controls}
+      {hint && <span className="block text-xs text-muted dark:text-dmuted mt-1">{hint}</span>}
+      {error && <span id={errorId} role="alert" className="block text-xs text-red-600 mt-1">{error}</span>}
+    </label>
+  );
+};
 
 export const inputCls = "w-full px-3 py-2 rounded-lg border border-bd dark:border-dborder bg-white dark:bg-dcard text-ink dark:text-dink text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand";
 
