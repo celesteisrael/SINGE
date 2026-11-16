@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Identificacao;
 
 use App\Http\Controllers\SingeApiController;
+use App\Http\Requests\Identificacao\StoreVerificacaoIdentidadeRequest;
 use App\Models\VerificacaoIdentidade;
 use App\Services\Identificacao\VerificacaoIdentidadeService;
 use Illuminate\Http\JsonResponse;
@@ -10,13 +11,11 @@ use Illuminate\Http\Request;
 
 class VerificacaoIdentidadeController extends SingeApiController
 {
-    public function store(Request $request, VerificacaoIdentidadeService $service): JsonResponse
+    public function store(StoreVerificacaoIdentidadeRequest $request, VerificacaoIdentidadeService $service): JsonResponse
     {
-        $dados = $request->only(['documento_identificacao_id', 'observacoes']);
-
         return $this->execute(
             fn (): array => $this->attributes(
-                $service->criar($dados, $this->authenticatedUser($request)),
+                $service->criar($request->validated(), $this->authenticatedUser($request)),
                 [
                     'id', 'documento_identificacao_id', 'utilizador_solicitante_id',
                     'utilizador_verificador_id', 'estado', 'observacoes', 'data_verificacao', 'created_at',
@@ -71,19 +70,18 @@ class VerificacaoIdentidadeController extends SingeApiController
         Request $request,
         VerificacaoIdentidadeService $service,
     ): JsonResponse {
-        $motivo = $request->input('motivo');
-        $observacoes = $request->input('observacoes');
-        if (! is_string($motivo) || ($observacoes !== null && ! is_string($observacoes))) {
-            return $this->failure('O motivo é obrigatório e os campos de texto devem ser válidos.', 422);
-        }
+        $dados = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:500'],
+            'observacoes' => ['nullable', 'string', 'max:2000'],
+        ]);
 
         return $this->execute(
             fn (): array => $this->attributes(
                 $service->rejeitar(
                     $verificacao,
                     $this->authenticatedUser($request),
-                    $motivo,
-                    $observacoes,
+                    $dados['motivo'],
+                    $dados['observacoes'] ?? null,
                 ),
                 [
                     'id', 'documento_identificacao_id', 'utilizador_solicitante_id',
@@ -92,6 +90,25 @@ class VerificacaoIdentidadeController extends SingeApiController
                 ],
             ),
             'Verificação de identidade rejeitada com sucesso.',
+        );
+    }
+
+    public function requestCorrection(
+        VerificacaoIdentidade $verificacao,
+        Request $request,
+        VerificacaoIdentidadeService $service,
+    ): JsonResponse {
+        $dados = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:500'],
+            'observacoes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        return $this->execute(
+            fn (): array => $this->attributes(
+                $service->solicitarCorrecao($verificacao, $this->authenticatedUser($request), $dados['motivo'], $dados['observacoes'] ?? null),
+                ['id', 'documento_identificacao_id', 'utilizador_solicitante_id', 'utilizador_verificador_id', 'estado', 'motivo_rejeicao', 'observacoes', 'data_verificacao', 'updated_at'],
+            ),
+            'Correcção do documento solicitada com sucesso.',
         );
     }
 }

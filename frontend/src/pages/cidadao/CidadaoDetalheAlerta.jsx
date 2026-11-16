@@ -2,7 +2,9 @@ import React from 'react';
 import Icon from '../../components/common/Icon';
 import { Card, Button, EmptyState } from '../../components/common/CommonComponents';
 
-export function CidadaoDetalheAlerta({ a, setPage }) {
+export function CidadaoDetalheAlerta({ a, loading = false, error = '', setPage }) {
+  if (loading) return <Card className="p-6">A carregar alerta…</Card>;
+  if (error) return <Card className="p-6 text-red-700" role="alert">{error}</Card>;
   if (!a) {
     return (
       <EmptyState 
@@ -13,13 +15,14 @@ export function CidadaoDetalheAlerta({ a, setPage }) {
     );
   }
 
-  const nivelMap = { 
-    'Crítico': { bg: 'bg-red-600', label: 'CRÍTICO' }, 
-    'Elevado': { bg: 'bg-orange-500', label: 'ELEVADO' }, 
-    'Médio': { bg: 'bg-yellow-500', label: 'MÉDIO' }, 
-    'Informativo': { bg: 'bg-brand', label: 'INFORMAÇÃO' } 
+  const nivelMap = {
+    critica: { bg: 'bg-red-700', label: 'CRÍTICA' },
+    alta: { bg: 'bg-orange-600', label: 'ALTA' },
+    media: { bg: 'bg-yellow-600', label: 'MÉDIA' },
+    baixa: { bg: 'bg-blue-700', label: 'BAIXA' },
+    informativa: { bg: 'bg-slate-600', label: 'INFORMAÇÃO' },
   };
-  const lvl = nivelMap[a.nivel] || nivelMap.Informativo;
+  const lvl = nivelMap[a.severidade] || nivelMap.informativa;
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
@@ -33,12 +36,13 @@ export function CidadaoDetalheAlerta({ a, setPage }) {
       <Card className="p-6">
         <div className="flex items-center gap-2 flex-wrap mb-3">
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded text-white ${lvl.bg}`}>{lvl.label}</span>
-          <span className="text-xs text-muted dark:text-dmuted">{a.tipo}</span>
-          {!a.ativo && (
+          <span className="text-xs text-muted dark:text-dmuted">{a.tipo_perigo}</span>
+          {a.estado === 'encerrado' && (
             <span className="text-xs px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">
-              Expirado
+              Encerrado
             </span>
           )}
+          {a.estado === 'publicado' && !a.activo && <span className="text-xs px-2 py-0.5 rounded bg-slate-200">Fora do período de validade</span>}
         </div>
 
         <h1 className="text-xl font-bold text-ink dark:text-dink">{a.titulo}</h1>
@@ -46,19 +50,19 @@ export function CidadaoDetalheAlerta({ a, setPage }) {
         <div className="grid sm:grid-cols-2 gap-3 mt-4 text-sm bg-light dark:bg-dsidebar/30 p-4 rounded-xl">
           <div>
             <p className="text-xs text-muted dark:text-dmuted">Região afectada</p>
-            <p className="text-ink dark:text-dink font-medium">{a.regiao}</p>
+            <p className="text-ink dark:text-dink font-medium">{a.area_geografica || [a.localizacao?.provincia, a.localizacao?.distrito].filter(Boolean).join(', ') || 'Não indicada'}</p>
           </div>
           <div>
             <p className="text-xs text-muted dark:text-dmuted">Publicado em</p>
-            <p className="text-ink dark:text-dink">{a.data}</p>
+            <p className="text-ink dark:text-dink">{a.data_publicacao ? new Date(a.data_publicacao).toLocaleString() : '—'}</p>
           </div>
           <div>
             <p className="text-xs text-muted dark:text-dmuted">Período de validade</p>
-            <p className="text-ink dark:text-dink">{a.validade}</p>
+            <p className="text-ink dark:text-dink">{new Date(a.valido_desde).toLocaleString()} – {new Date(a.valido_ate).toLocaleString()}</p>
           </div>
           <div>
             <p className="text-xs text-muted dark:text-dmuted">Entidade responsável</p>
-            <p className="text-ink dark:text-dink">{a.entidade}</p>
+            <p className="text-ink dark:text-dink">{a.fonte}</p>
           </div>
         </div>
 
@@ -75,7 +79,7 @@ export function CidadaoDetalheAlerta({ a, setPage }) {
           <p className="text-sm text-ink dark:text-dink leading-relaxed">{a.recomendacoes}</p>
         </div>
 
-        <p className="mt-4 text-xs text-muted dark:text-dmuted">Fonte oficial: {a.fonte}</p>
+        <p className="mt-4 text-xs text-muted dark:text-dmuted">Fonte/autoridade emissora: {a.fonte}</p>
       </Card>
     </div>
   );

@@ -32,11 +32,14 @@ class StoreMissaoRequest extends SingeFormRequest
                 'integer',
                 Rule::exists('equipas', 'id')->where('estado', 'disponivel'),
             ],
-            'coordenador_id' => ['nullable', 'integer', $this->coordinatorExistsRule()],
-            'estado' => ['sometimes', Rule::enum(EstadoMissao::class)],
+            'coordenador_id' => ['prohibited'],
+            'estado' => ['prohibited'],
+            'data_inicio' => ['prohibited'],
+            'data_conclusao' => ['prohibited'],
             'data_atribuicao' => ['required', 'date'],
-            'data_inicio' => ['nullable', 'date', 'required_with:data_conclusao', 'after_or_equal:data_atribuicao'],
-            'data_conclusao' => ['nullable', 'date', 'after_or_equal:data_inicio'],
+            'data_prevista_conclusao' => ['required', 'date', 'after_or_equal:data_atribuicao'],
+            'objectivos' => ['required', 'string'],
+            'instrucoes' => ['required', 'string'],
             'observacoes' => ['nullable', 'string'],
         ];
     }
@@ -47,9 +50,8 @@ class StoreMissaoRequest extends SingeFormRequest
             ...parent::messages(),
             'ocorrencia_id.exists' => 'A ocorrência não existe ou já não aceita novas missões.',
             'equipa_id.exists' => 'A equipa não existe ou não está disponível para atribuição.',
-            'coordenador_id.exists' => 'O coordenador seleccionado não tem um perfil autorizado.',
-            'data_inicio.after_or_equal' => 'A data de início não pode preceder a atribuição.',
-            'data_conclusao.after_or_equal' => 'A data de conclusão não pode preceder a data de início.',
+            'coordenador_id.prohibited' => 'O Coordenador responsável é obtido a partir da sessão autenticada.',
+            'data_prevista_conclusao.after_or_equal' => 'A data prevista não pode preceder a atribuição.',
         ];
     }
 }

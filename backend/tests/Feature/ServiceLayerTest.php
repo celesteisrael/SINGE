@@ -273,6 +273,7 @@ it('preserva os pesos usados em cada detalhe da avaliação', function () {
     $savedFactorWeights = $assessment->fresh('detalhes')->detalhes
         ->mapWithKeys(fn ($detail): array => [$detail->fator_prioridade_id => $detail->peso_aplicado])
         ->all();
+    $snapshot = $assessment->fresh('detalhes')->detalhes->first();
 
     expect($savedFactorWeights)->toBe([
         $factors[0]->id => '0.30',
@@ -280,7 +281,9 @@ it('preserva os pesos usados em cada detalhe da avaliação', function () {
         $factors[2]->id => '0.20',
         $factors[3]->id => '0.15',
         $factors[4]->id => '0.10',
-    ])->and($incident->fresh()->prioridade_id)->toBe($priorities[1]->id);
+    ])->and($snapshot->fator_nome_snapshot)->toBe('Gravidade')
+        ->and($snapshot->contribuicao_ponderada)->toBe('1.50')
+        ->and($incident->fresh()->prioridade_id)->toBe($priorities[1]->id);
 });
 
 it('não atribui missões a equipas indisponíveis e mantém estados coerentes', function () {
@@ -546,7 +549,7 @@ it('impede que uma notificação altere o destinatário e que outro utilizador a
 
 it('separa o titular que solicita verificação do verificador e preserva a decisão final', function () {
     $requester = singeUserWithProfile('Cidadão');
-    $reviewer = singeUserWithProfile('Administrador');
+    $reviewer = singeUserWithProfile('Operador');
     $document = DocumentoIdentificacao::query()->create([
         'utilizador_id' => $requester->id,
         'tipo_documento' => 'BI',
@@ -578,7 +581,7 @@ it('separa o titular que solicita verificação do verificador e preserva a deci
 });
 
 it('não permite que o titular do documento verifique a própria identidade', function () {
-    $owner = singeUserWithProfile('Administrador');
+    $owner = singeUserWithProfile('Operador');
     $document = DocumentoIdentificacao::query()->create([
         'utilizador_id' => $owner->id,
         'tipo_documento' => 'BI',
@@ -588,6 +591,6 @@ it('não permite que o titular do documento verifique a própria identidade', fu
         'documento_identificacao_id' => $document->id,
     ], $owner);
 
-    expect(fn () => (new VerificacaoIdentidadeService)->aprovar($verification, $owner))
+    expect(fn () => (new VerificacaoIdentidadeService)->iniciarAnalise($verification, $owner))
         ->toThrow(AuthorizationException::class);
 });

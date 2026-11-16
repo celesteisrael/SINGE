@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class VerificacaoIdentidade extends Model
 {
@@ -42,5 +43,11 @@ class VerificacaoIdentidade extends Model
     public function utilizadorSolicitante(): BelongsTo
     {
         return $this->belongsTo(User::class, 'utilizador_solicitante_id');
+    }
+
+    /** @return HasMany<HistoricoVerificacaoIdentidade, $this> */
+    public function historico(): HasMany
+    {
+        return $this->hasMany(HistoricoVerificacaoIdentidade::class, 'verificacao_identidade_id')->oldest();
     }
 }

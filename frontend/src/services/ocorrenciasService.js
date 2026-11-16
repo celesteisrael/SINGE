@@ -1,30 +1,51 @@
-/**
- * SINGE - Serviço de Gestão de Ocorrências
- * Comunica com o backend Laravel / Sanctum API
- */
-import { api } from './api';
+import { api, ApiError } from './api';
+
+function extractData(response, expected) {
+  if (!response?.success || !expected(response.data)) {
+    throw new ApiError('A API devolveu uma resposta inválida para ocorrências.', 502, response);
+  }
+  return response.data;
+}
 
 export const ocorrenciasService = {
-  /**
-   * Lista todas as ocorrências disponíveis
-   */
-  async listar() {
-    return api.get('/ocorrencias');
+  async listar({ estado, tipo_ocorrencia_id, page = 1, per_page = 20 } = {}) {
+    const params = new URLSearchParams({ page: String(page), per_page: String(per_page) });
+    if (estado) params.set('estado', estado);
+    if (tipo_ocorrencia_id) params.set('tipo_ocorrencia_id', String(tipo_ocorrencia_id));
+
+    return extractData(
+      await api.get(`/ocorrencias?${params.toString()}`),
+      data => Array.isArray(data?.items) && data?.pagination,
+    );
   },
 
-  /**
-   * [R1 e R3] Cria uma nova ocorrência (Operador ou Cidadão)
-   * Devolve a ocorrência com id/ref gerado pelo servidor, estado e prioridade
-   */
   async registar(dados) {
-    return api.post('/ocorrencias', dados);
+    return extractData(
+      await api.post('/ocorrencias', dados),
+      data => data && typeof data === 'object' && Number.isInteger(data.id),
+    );
   },
 
-  /**
-   * Consulta os detalhes de uma ocorrência
-   */
-  async obterPorRef(ref) {
-    return api.get(`/ocorrencias/${encodeURIComponent(ref)}`);
+  async obterPorId(id) {
+    return extractData(
+      await api.get(`/ocorrencias/${encodeURIComponent(id)}`),
+      data => data && typeof data === 'object' && Number.isInteger(data.id),
+    );
+  },
+
+  async listarTipos() {
+    return extractData(
+      await api.get('/tipos-ocorrencia'),
+      Array.isArray,
+    );
+  },
+
+  async opcoesGeograficas(tipo, parentId = null, parentType = null) {
+    const params = new URLSearchParams({ tipo });
+    if (parentId) params.set('parent_id', String(parentId));
+    if (parentType) params.set('parent_type', parentType);
+    return extractData(await api.get(`/referencias/geograficas?${params}`), Array.isArray);
   },
 };
 
+export default ocorrenciasService;

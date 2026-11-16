@@ -2,30 +2,51 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Perfil;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 class VerificarPerfil
 {
-    public function handle(Request $request, Closure $next, ...$perfis): Response
+    private const PERFIS_VALIDOS = [
+        'Administrador',
+        'Operador',
+        'Coordenador',
+        'Agente',
+        'Cidadão',
+    ];
+
+    public function handle(Request $request, Closure $next, string ...$perfis): Response
     {
         $utilizador = $request->user();
 
-        // Verificar se existe utilizador autenticado
-        if (!$utilizador) {
+        if (! $utilizador instanceof User) {
             return response()->json([
-                'message' => 'Não autenticado.'
+                'success' => false,
+                'message' => 'Autenticação necessária.',
             ], 401);
         }
 
-        // Verificar se o utilizador possui um dos perfis permitidos
-        if (!$utilizador->perfil || !in_array(
-            $utilizador->perfil->nome,
-            $perfis
-        )) {
+        $perfil = $utilizador->perfil;
+        if (! $perfil instanceof Perfil || ! in_array($perfil->nome, self::PERFIS_VALIDOS, true)) {
             return response()->json([
-                'message' => 'Não tem permissão para realizar esta operação.'
+                'success' => false,
+                'message' => 'O utilizador não possui um perfil válido.',
+            ], 403);
+        }
+
+        $perfisPermitidos = [];
+        foreach ($perfis as $perfilPermitido) {
+            $perfisPermitidos = [...$perfisPermitidos, ...explode(',', $perfilPermitido)];
+        }
+        $perfisPermitidos = array_map('trim', $perfisPermitidos);
+
+        if (! in_array($perfil->nome, $perfisPermitidos, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'O perfil do utilizador não está autorizado a executar esta operação.',
             ], 403);
         }
 

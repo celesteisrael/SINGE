@@ -21,6 +21,8 @@ class DatabaseSeeder extends Seeder
             TiposOcorrenciaSeeder::class,
             TiposEquipaSeeder::class,
             FatoresPrioridadeSeeder::class,
+            DemoCoordenadorSeeder::class,
+            DemoSupportingDataSeeder::class,
         ]);
     }
 }

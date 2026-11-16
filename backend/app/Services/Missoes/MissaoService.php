@@ -6,6 +6,7 @@ use App\Enums\EstadoEquipa;
 use App\Enums\EstadoMissao;
 use App\Enums\EstadoOcorrencia;
 use App\Models\Equipa;
+use App\Models\HistoricoMissao;
 use App\Models\Missao;
 use App\Models\Ocorrencia;
 use App\Models\Perfil;
@@ -30,23 +31,21 @@ class MissaoService
             $this->validarOcorrenciaActiva($ocorrencia);
             $this->validarDisponibilidade($equipa);
 
-            $coordenadorId = $dados['coordenador_id'] ?? $utilizador->id;
-            $coordenador = User::query()->with('perfil')->findOrFail((int) $coordenadorId);
-            if (! in_array($this->nomePerfil($coordenador), ['Administrador', 'Coordenador'], true)) {
-                throw new InvalidArgumentException('O responsável seleccionado não tem perfil de coordenador.');
-            }
-
             $missao = Missao::query()->create([
                 'ocorrencia_id' => $ocorrencia->id,
                 'equipa_id' => $equipa->id,
-                'coordenador_id' => $coordenador->id,
+                'coordenador_id' => $utilizador->id,
                 'estado' => EstadoMissao::ATRIBUIDA,
-                'data_atribuicao' => now(),
+                'data_atribuicao' => $dados['data_atribuicao'] ?? now(),
+                'data_prevista_conclusao' => $dados['data_prevista_conclusao'] ?? null,
+                'objectivos' => $dados['objectivos'] ?? null,
+                'instrucoes' => $dados['instrucoes'] ?? null,
                 'observacoes' => $dados['observacoes'] ?? null,
             ]);
 
             $equipa->estado = EstadoEquipa::EM_MISSAO->value;
             $equipa->save();
+            $this->registarHistorico($missao, $utilizador, 'criada', null, EstadoMissao::ATRIBUIDA->value);
 
             return $missao->fresh(['ocorrencia', 'equipa', 'coordenador']);
         });
@@ -58,17 +57,23 @@ class MissaoService
         return $this->criar($dados, $utilizador);
     }
 
-    public function atualizarEstado(Missao $missao, string $estado, User $utilizador): Missao
+    public function atualizarEstado(
+        Missao $missao,
+        string $estado,
+        User $utilizador,
+        ?string $observacoes = null,
+        ?string $operacaoHistorico = null,
+    ): Missao
     {
         $novoEstado = EstadoMissao::tryFrom(trim($estado));
         if (! $novoEstado) {
             throw new InvalidArgumentException('Estado da missão inválido.');
         }
 
-        return DB::transaction(function () use ($missao, $novoEstado, $utilizador): Missao {
+        return DB::transaction(function () use ($missao, $novoEstado, $utilizador, $observacoes, $operacaoHistorico): Missao {
             $missaoActual = Missao::query()->lockForUpdate()->findOrFail($missao->id);
             $equipa = Equipa::query()->lockForUpdate()->findOrFail($missaoActual->equipa_id);
-            $this->autorizarOperacao($utilizador);
+            $this->autorizarOperacao($utilizador, $missaoActual, $novoEstado);
 
             $estadoActual = EstadoMissao::tryFrom((string) $missaoActual->getRawOriginal('estado'));
             if (! $estadoActual) {
@@ -110,6 +115,14 @@ class MissaoService
                 $missaoActual->data_conclusao = now();
             }
             $missaoActual->save();
+            $this->registarHistorico(
+                $missaoActual,
+                $utilizador,
+                $operacaoHistorico ?? ($novoEstado === EstadoMissao::CANCELADA ? 'cancelada' : 'estado_alterado'),
+                $estadoActual->value,
+                $novoEstado->value,
+                $observacoes,
+            );
 
             if (in_array($novoEstado, [EstadoMissao::CONCLUIDA, EstadoMissao::CANCELADA], true)) {
                 $outraMissaoActiva = Missao::query()
@@ -134,6 +147,64 @@ class MissaoService
         return $this->atualizarEstado($missao, EstadoMissao::CONCLUIDA->value, $utilizador);
     }
 
+    public function registarActividade(
+        Missao $missao,
+        string $operacao,
+        ?string $observacoes,
+        User $utilizador,
+    ): Missao {
+        if ($this->nomePerfil($utilizador) !== 'Agente'
+            || $utilizador->equipa_id === null
+            || (int) $utilizador->equipa_id !== (int) $missao->equipa_id) {
+            throw new AuthorizationException('O Agente só pode actualizar missões da sua equipa.');
+        }
+
+        return DB::transaction(function () use ($missao, $operacao, $observacoes, $utilizador): Missao {
+            $missaoActual = Missao::query()->lockForUpdate()->findOrFail($missao->id);
+            if ((int) $utilizador->equipa_id !== (int) $missaoActual->equipa_id) {
+                throw new AuthorizationException('A missão não pertence à equipa do Agente autenticado.');
+            }
+
+            $estado = $missaoActual->estado instanceof EstadoMissao
+                ? $missaoActual->estado
+                : EstadoMissao::from((string) $missaoActual->getRawOriginal('estado'));
+            $texto = trim((string) $observacoes);
+
+            if ($operacao === 'conhecimento') {
+                if ($estado !== EstadoMissao::ATRIBUIDA) {
+                    throw new InvalidArgumentException('A recepção só pode ser confirmada enquanto a missão estiver atribuída.');
+                }
+                $this->registarHistorico($missaoActual, $utilizador, 'conhecimento_confirmado', $estado->value, $estado->value);
+            } elseif ($operacao === 'progresso' || $operacao === 'dificuldade') {
+                if (! in_array($estado, [EstadoMissao::EM_DESLOCACAO, EstadoMissao::EM_EXECUCAO], true)) {
+                    throw new InvalidArgumentException('A missão precisa estar em deslocação ou execução para receber esta actualização.');
+                }
+                $this->registarHistorico(
+                    $missaoActual,
+                    $utilizador,
+                    $operacao === 'dificuldade' ? 'dificuldade_reportada' : 'progresso_reportado',
+                    $estado->value,
+                    $estado->value,
+                    $texto,
+                );
+            } elseif ($operacao === 'chegada') {
+                if ($estado !== EstadoMissao::EM_DESLOCACAO) {
+                    throw new InvalidArgumentException('A chegada ao local só pode ser registada durante a deslocação.');
+                }
+                $this->atualizarEstado($missaoActual, EstadoMissao::EM_EXECUCAO->value, $utilizador, $texto, 'chegada_local');
+            } elseif ($operacao === 'concluir') {
+                if ($estado !== EstadoMissao::EM_EXECUCAO) {
+                    throw new InvalidArgumentException('A intervenção só pode ser concluída depois de iniciada a execução.');
+                }
+                $this->atualizarEstado($missaoActual, EstadoMissao::CONCLUIDA->value, $utilizador, $texto, 'intervencao_concluida');
+            } else {
+                throw new InvalidArgumentException('A operação de missão indicada não é suportada.');
+            }
+
+            return $missaoActual->fresh(['ocorrencia', 'equipa', 'coordenador', 'historico.utilizador']);
+        });
+    }
+
     public function cancelar(Missao $missao, User $utilizador): Missao
     {
         return $this->atualizarEstado($missao, EstadoMissao::CANCELADA->value, $utilizador);
@@ -143,7 +214,7 @@ class MissaoService
     {
         $this->autorizarGestao($utilizador);
 
-        return DB::transaction(function () use ($missao, $equipaId): Missao {
+        return DB::transaction(function () use ($missao, $equipaId, $utilizador): Missao {
             $missaoActual = Missao::query()->lockForUpdate()->findOrFail($missao->id);
             if ($missaoActual->getRawOriginal('estado') !== EstadoMissao::ATRIBUIDA->value) {
                 throw new InvalidArgumentException('Só é possível alterar a equipa antes da deslocação.');
@@ -159,6 +230,14 @@ class MissaoService
 
             $missaoActual->equipa_id = $equipaNova->id;
             $missaoActual->save();
+            $this->registarHistorico(
+                $missaoActual,
+                $utilizador,
+                'equipa_reatribuida',
+                $missaoActual->estado,
+                $missaoActual->estado,
+                "Equipa anterior: {$equipaAnterior->nome}; nova equipa: {$equipaNova->nome}.",
+            );
             $equipaNova->estado = EstadoEquipa::EM_MISSAO->value;
             $equipaNova->save();
 
@@ -176,6 +255,65 @@ class MissaoService
 
             return $missaoActual->fresh(['ocorrencia', 'equipa', 'coordenador']);
         });
+    }
+
+    /**
+     * @param array<string, mixed> $filtros
+     * @return \Illuminate\Database\Eloquent\Collection<int, Missao>
+     */
+    public function listar(array $filtros = []): \Illuminate\Database\Eloquent\Collection
+    {
+        return Missao::query()
+            ->with(['ocorrencia.prioridade', 'equipa.tipoEquipa', 'coordenador'])
+            ->when(isset($filtros['estado']), fn ($query) => $query->where('estado', $filtros['estado']))
+            ->when(isset($filtros['equipa_id']), fn ($query) => $query->where('equipa_id', $filtros['equipa_id']))
+            ->when(isset($filtros['ocorrencia_id']), fn ($query) => $query->where('ocorrencia_id', $filtros['ocorrencia_id']))
+            ->when(isset($filtros['q']), function ($query) use ($filtros): void {
+                $term = trim((string) $filtros['q']);
+                $query->whereHas('ocorrencia', fn ($occurrence) => $occurrence
+                    ->where('titulo', 'like', "%{$term}%")
+                    ->orWhere('id', ctype_digit($term) ? (int) $term : -1));
+            })
+            ->latest()
+            ->get();
+    }
+
+    public function consultar(int $id, User $utilizador): Missao
+    {
+        $missao = Missao::query()
+            ->with([
+                'ocorrencia.prioridade',
+                'equipa.tipoEquipa',
+                'equipa.utilizadores.perfil',
+                'coordenador',
+                'historico.utilizador',
+            ])
+            ->findOrFail($id);
+        $perfil = $this->nomePerfil($utilizador);
+        if (! in_array($perfil, self::PERFIS_GESTAO, true)
+            && ! ($perfil === 'Agente' && (int) $utilizador->equipa_id === (int) $missao->equipa_id)) {
+            throw new AuthorizationException('O utilizador não está autorizado a consultar esta missão.');
+        }
+
+        return $missao;
+    }
+
+    private function registarHistorico(
+        Missao $missao,
+        User $utilizador,
+        string $operacao,
+        ?string $estadoAnterior,
+        ?string $estadoNovo,
+        ?string $observacoes = null,
+    ): void {
+        HistoricoMissao::query()->create([
+            'missao_id' => $missao->id,
+            'utilizador_id' => $utilizador->id,
+            'operacao' => $operacao,
+            'estado_anterior' => $estadoAnterior,
+            'estado_novo' => $estadoNovo,
+            'observacoes' => $observacoes,
+        ]);
     }
 
     private function validarDisponibilidade(Equipa $equipa): void
@@ -209,9 +347,17 @@ class MissaoService
         }
     }
 
-    private function autorizarOperacao(User $utilizador): void
+    private function autorizarOperacao(User $utilizador, Missao $missao, EstadoMissao $novoEstado): void
     {
-        if (in_array($this->nomePerfil($utilizador), self::PERFIS_GESTAO, true)) {
+        $perfil = $this->nomePerfil($utilizador);
+        if (in_array($perfil, self::PERFIS_GESTAO, true)) {
+            return;
+        }
+
+        if ($perfil === 'Agente'
+            && $novoEstado !== EstadoMissao::CANCELADA
+            && $utilizador->equipa_id !== null
+            && (int) $utilizador->equipa_id === (int) $missao->equipa_id) {
             return;
         }
 

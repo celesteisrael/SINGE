@@ -20,7 +20,7 @@ class UpdateLocalizacaoRequest extends SingeFormRequest
     {
         return parent::authorize()
             && $this->route('localizacao') instanceof Localizacao
-            && $this->userHasAnyProfile(['Administrador', 'Operador']);
+            && $this->userHasAnyProfile(['Administrador', 'Coordenador']);
     }
 
     public function withValidator(Validator $validator): void

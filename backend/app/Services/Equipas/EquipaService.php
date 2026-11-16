@@ -7,6 +7,7 @@ use App\Enums\EstadoMissao;
 use App\Models\Equipa;
 use App\Models\Missao;
 use App\Models\Perfil;
+use App\Models\TipoEquipa;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
@@ -29,6 +30,36 @@ class EquipaService
         $this->autorizarConsulta($equipa, $utilizador);
 
         return $equipa;
+    }
+
+    /** @param array<string, mixed> $filtros
+     *  @return Collection<int, Equipa>
+     */
+    public function listar(array $filtros = []): Collection
+    {
+        return Equipa::query()
+            ->with(['tipoEquipa', 'utilizadores.perfil', 'missoes.ocorrencia'])
+            ->when(isset($filtros['q']), fn ($query) => $query->where(
+                'nome',
+                'like',
+                '%'.trim((string) $filtros['q']).'%',
+            ))
+            ->when(isset($filtros['tipo_equipa_id']), fn ($query) => $query->where(
+                'tipo_equipa_id',
+                $filtros['tipo_equipa_id'],
+            ))
+            ->when(isset($filtros['estado']), fn ($query) => $query->where(
+                'estado',
+                $filtros['estado'],
+            ))
+            ->orderBy('nome')
+            ->get();
+    }
+
+    /** @return Collection<int, TipoEquipa> */
+    public function listarTipos(): Collection
+    {
+        return TipoEquipa::query()->where('ativo', true)->orderBy('nome')->get(['id', 'nome']);
     }
 
     public function atualizarDisponibilidade(Equipa $equipa, string $estado, User $utilizador): Equipa
@@ -81,7 +112,7 @@ class EquipaService
 
         return Missao::query()
             ->where('equipa_id', $equipa->id)
-            ->with(['ocorrencia', 'coordenador', 'equipa'])
+            ->with(['ocorrencia.prioridade', 'ocorrencia.localizacaoGeografica.provincia', 'ocorrencia.localizacaoGeografica.distrito', 'coordenador', 'equipa', 'historico.utilizador'])
             ->get();
     }
 

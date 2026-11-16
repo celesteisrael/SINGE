@@ -1,70 +1,29 @@
-import React, { useState } from 'react';
-import Icon from '../../components/common/Icon';
-import { Card } from '../../components/common/CommonComponents';
-import { INFO_SEGURANCA } from '../../data/mockData';
+import React from 'react';
+import { Card, EmptyState } from '../../components/common/CommonComponents';
 
-export function CidadaoInformacoes({ setPage, setSelectedInfo }) {
-  const cats = [...new Set(INFO_SEGURANCA.map(i => i.categoria))];
-  const [cat, setCat] = useState('');
-  const filtered = cat ? INFO_SEGURANCA.filter(i => i.categoria === cat) : INFO_SEGURANCA;
+export function CidadaoInformacoes({ alertas = [], loading = false, error = '', onRefresh, setPage, setSelectedAlerta }) {
+  const guides = alertas.filter(alert => alert.activo && alert.recomendacoes?.trim());
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-ink dark:text-dink">Preparação e Segurança Comunitária</h1>
-        <p className="text-sm text-muted dark:text-dmuted mt-1">
-          Recomendações e medidas preventivas gerais — não substituem as instruções das autoridades competentes.
+    <div className="mx-auto max-w-6xl space-y-4">
+      <header>
+        <h1 className="text-2xl font-bold text-ink dark:text-dink">Informações de segurança</h1>
+        <p className="mt-1 text-sm text-muted dark:text-dmuted">
+          Recomendações provenientes de alertas publicados por fontes identificadas. Este espaço não contém conteúdo editorial permanente enquanto a API não o disponibilizar.
         </p>
-      </div>
-
-      <div className="flex gap-2 flex-wrap">
-        <button 
-          onClick={() => setCat('')} 
-          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-            cat === '' 
-              ? 'bg-brand text-white' 
-              : 'bg-white dark:bg-dcard border border-bd dark:border-dborder text-ink dark:text-dink hover:bg-light dark:hover:bg-dsidebar'
-          }`}
-        >
-          Todas as categorias
-        </button>
-        {cats.map(c => (
-          <button 
-            key={c} 
-            onClick={() => setCat(c)} 
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              cat === c 
-                ? 'bg-brand text-white' 
-                : 'bg-white dark:bg-dcard border border-bd dark:border-dborder text-ink dark:text-dink hover:bg-light dark:hover:bg-dsidebar'
-            }`}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-3">
-        {filtered.map(info => (
-          <Card key={info.id} className="p-5 flex flex-col hover:border-brand/40 transition-colors">
-            <div className="flex items-start gap-3">
-              <div className="w-11 h-11 rounded-lg bg-lblue dark:bg-dblue/20 text-brand dark:text-dblue flex items-center justify-center shrink-0">
-                <Icon name={info.icon} size={22} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted dark:text-dmuted uppercase tracking-wide font-semibold">{info.categoria}</p>
-                <p className="text-sm font-semibold text-ink dark:text-dink mt-0.5">{info.titulo}</p>
-              </div>
-            </div>
-            <p className="text-xs text-muted dark:text-dmuted mt-3 flex-1">{info.resumo}</p>
-            <button 
-              onClick={() => { setSelectedInfo(info); setPage('detalhe-info'); }} 
-              className="mt-3 text-xs text-brand dark:text-dblue hover:underline text-left flex items-center gap-1 font-medium"
-            >
-              Consultar guia completo <Icon name="ArrowRight" size={12} />
-            </button>
-          </Card>
-        ))}
-      </div>
+      </header>
+      {error && <Card className="p-4 text-sm text-red-700" role="alert">{error}<button className="ml-3 underline" onClick={onRefresh}>Tentar novamente</button></Card>}
+      {loading ? <Card className="p-6 text-sm text-muted">A carregar recomendações…</Card>
+        : guides.length === 0 ? <Card><EmptyState icon="BookOpen" title="Não há recomendações publicadas." description="Consulte esta área novamente quando houver informação aprovada pelas autoridades." /></Card>
+          : <div className="grid gap-3 md:grid-cols-2">{guides.map(alert => (
+            <Card key={alert.id} className="p-5">
+              <p className="text-xs font-semibold uppercase text-muted">{alert.tipo_perigo} · {alert.fonte}</p>
+              <h2 className="mt-2 font-semibold text-ink dark:text-dink">{alert.titulo}</h2>
+              <p className="mt-1 text-sm text-muted">{alert.area_geografica || [alert.localizacao?.provincia, alert.localizacao?.distrito].filter(Boolean).join(', ') || 'Área não indicada'}</p>
+              <p className="mt-3 text-sm text-ink dark:text-dink">{alert.recomendacoes}</p>
+              <button className="mt-3 text-sm font-medium text-brand hover:underline" onClick={() => { setSelectedAlerta(alert); setPage('detalhe-alerta'); }}>Consultar alerta e validade</button>
+            </Card>
+          ))}</div>}
     </div>
   );
 }

@@ -9,7 +9,7 @@ class StoreAvaliacaoPrioridadeRequest extends SingeFormRequest
 {
     public function authorize(): bool
     {
-        if (! parent::authorize() || ! $this->userHasAnyProfile(['Administrador', 'Operador', 'Coordenador'])) {
+        if (! parent::authorize() || ! $this->userHasAnyProfile(['Administrador', 'Coordenador'])) {
             return false;
         }
 

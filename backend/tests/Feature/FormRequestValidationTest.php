@@ -33,6 +33,7 @@ use App\Models\Provincia;
 use App\Models\TipoEquipa;
 use App\Models\TipoOcorrencia;
 use App\Models\User;
+use App\Models\VerificacaoIdentidade;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\DB;
@@ -122,7 +123,19 @@ it('uses form requests for the existing public authentication endpoints', functi
 });
 
 it('validates occurrence input and prevents client-selected priority, actor and state', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->citizen()->create();
+    $approvedDocument = DocumentoIdentificacao::query()->create([
+        'utilizador_id' => $user->id,
+        'tipo_documento' => 'BI',
+        'numero_documento' => 'FORM-'.uniqid(),
+        'estado_verificacao' => 'APROVADA',
+    ]);
+    VerificacaoIdentidade::query()->create([
+        'documento_identificacao_id' => $approvedDocument->id,
+        'utilizador_solicitante_id' => $user->id,
+        'estado' => 'APROVADA',
+        'data_verificacao' => now(),
+    ]);
     $type = TipoOcorrencia::create(['nome' => 'Inundação']);
     $priority = Prioridade::create(['nome' => 'Alta', 'nivel' => 1]);
     $location = createLocationFixture();
@@ -250,10 +263,10 @@ it('validates mission references, available teams, dates and enum states', funct
     $data = [
         'ocorrencia_id' => $occurrence->id,
         'equipa_id' => $team->id,
-        'coordenador_id' => $user->id,
-        'estado' => EstadoMissao::ATRIBUIDA->value,
         'data_atribuicao' => '2026-11-06 09:00:00',
-        'data_inicio' => '2026-11-06 10:00:00',
+        'data_prevista_conclusao' => '2026-11-06 18:00:00',
+        'objectivos' => 'Prestar assistência.',
+        'instrucoes' => 'Avaliar a área.',
     ];
 
     [, $validator] = requestValidator(StoreMissaoRequest::class, $data, $user);
@@ -273,10 +286,9 @@ it('validates mission references, available teams, dates and enum states', funct
     [, $validator] = requestValidator(StoreMissaoRequest::class, [
         ...$data,
         'ocorrencia_id' => 99999,
-        'estado' => 'em_estado_desconhecido',
         'data_inicio' => '2026-11-05 10:00:00',
     ], $user);
-    expect($validator->errors()->keys())->toContain('ocorrencia_id', 'equipa_id', 'estado', 'data_inicio');
+    expect($validator->errors()->keys())->toContain('ocorrencia_id', 'equipa_id', 'data_inicio');
 
     $mission = Missao::create([
         ...$data,
@@ -355,7 +367,8 @@ it('validates identity document uniqueness, dates, file types and ownership fiel
         'numero_documento' => 'P-123',
         'data_validade' => '2030-01-01',
     ], $user);
-    expect($validator->passes())->toBeTrue();
+    expect($validator->passes())->toBeFalse()
+        ->and($validator->errors()->has('ficheiro'))->toBeTrue();
 
     $document = DocumentoIdentificacao::create([
         'utilizador_id' => $user->id,

@@ -53,12 +53,18 @@ class AuthController extends Controller
         $dados = $request->validated();
 
         $utilizador = User::where('email', $dados['email'])
-            ->with('perfil', 'localizacao')
+            ->with('perfil', 'equipa', 'localizacao')
             ->first();
 
         if (! $utilizador || ! Hash::check($dados['password'], $utilizador->password)) {
             throw ValidationException::withMessages([
                 'email' => ['As credenciais introduzidas são inválidas.'],
+            ]);
+        }
+
+        if (! $utilizador->activo) {
+            throw ValidationException::withMessages([
+                'email' => ['Esta conta está inactiva. Contacte um administrador do SINGE.'],
             ]);
         }
 

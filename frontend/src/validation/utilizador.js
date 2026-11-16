@@ -7,11 +7,11 @@
  * [RNF02] Perfis disponíveis no SINGE definidos numa única constante
  */
 export const PERFIS = [
-  'Cidadão',
-  'Operador',
-  'Equipa de Resposta',
-  'Gestor',
   'Administrador',
+  'Coordenador',
+  'Operador',
+  'Agente',
+  'Cidadão',
 ];
 
 /**

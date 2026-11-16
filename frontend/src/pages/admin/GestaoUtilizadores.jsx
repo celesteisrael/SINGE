@@ -12,15 +12,18 @@ import {
   Field, 
   inputCls 
 } from '../../components/common/CommonComponents';
-import { UTILIZADORES } from '../../data/mockData';
 import { useToast } from '../../contexts/ToastContext';
 import { PERFIS, validarUtilizador } from '../../validation/utilizador';
 import { utilizadoresService } from '../../services/utilizadoresService';
 import { NetworkError, ValidationError } from '../../services/api';
+import { coordenadorService } from '../../services/coordenadorService';
 
 export function GestaoUtilizadores() {
   const toast = useToast();
-  const [utilizadores, setUtilizadores] = useState(UTILIZADORES);
+  const [utilizadores, setUtilizadores] = useState([]);
+  const [equipas, setEquipas] = useState([]);
+  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [perfil, setPerfil] = useState('');
   const [estado, setEstado] = useState('');
@@ -37,6 +40,7 @@ export function GestaoUtilizadores() {
   const [formPerfil, setFormPerfil] = useState(PERFIS[1]); // 'Operador'
   const [formEstado, setFormEstado] = useState('Activo');
   const [formPassword, setFormPassword] = useState('');
+  const [formEquipaId, setFormEquipaId] = useState('');
 
   // Ao abrir o modal, inicializar campos controlados e limpar password/erros
   useEffect(() => {
@@ -48,12 +52,14 @@ export function GestaoUtilizadores() {
         setFormPerfil(modal.data.perfil || PERFIS[1]);
         setFormEstado(modal.data.estado || 'Activo');
         setFormPassword('');
+        setFormEquipaId(modal.data.equipa_id ? String(modal.data.equipa_id) : '');
       } else {
         setFormNome('');
         setFormEmail('');
         setFormPerfil(PERFIS[1]);
         setFormEstado('Activo');
         setFormPassword('');
+        setFormEquipaId('');
       }
     } else {
       // Garantir que a password nunca é mantida em estado quando o modal fecha
@@ -64,15 +70,16 @@ export function GestaoUtilizadores() {
   // Carregar utilizadores da API se disponível
   useEffect(() => {
     let isMounted = true;
-    utilizadoresService.listar()
-      .then(res => {
-        if (isMounted && Array.isArray(res)) {
-          setUtilizadores(res);
+    Promise.all([utilizadoresService.listar(), coordenadorService.teams()])
+      .then(([users, teams]) => {
+        if (isMounted) {
+          setUtilizadores(users);
+          setEquipas(teams);
+          setLoadError('');
         }
       })
-      .catch(() => {
-        // Se a API não estiver a correr e sem mock, mantém a lista inicial
-      });
+      .catch(error => { if (isMounted) setLoadError(error.message || 'Não foi possível carregar os utilizadores.'); })
+      .finally(() => { if (isMounted) setLoading(false); });
     return () => { isMounted = false; };
   }, []);
 
@@ -103,6 +110,10 @@ export function GestaoUtilizadores() {
       setFieldErrors(errors);
       return;
     }
+    if (formPerfil === 'Agente' && !formEquipaId) {
+      setFieldErrors({ equipa_id: 'Associe o Agente a uma equipa operacional.' });
+      return;
+    }
 
     setIsSubmitting(true);
     setFieldErrors({});
@@ -114,6 +125,7 @@ export function GestaoUtilizadores() {
           email: formEmail.trim(),
           perfil: formPerfil,
           estado: formEstado,
+          equipa_id: formPerfil === 'Agente' ? Number(formEquipaId) : null,
         };
         const updated = await utilizadoresService.atualizar(modal.data.id, dadosUpdate);
         setUtilizadores(prev => prev.map(u => u.id === modal.data.id ? { ...u, ...updated } : u));
@@ -124,6 +136,7 @@ export function GestaoUtilizadores() {
           email: formEmail.trim(),
           perfil: formPerfil,
           estado: formEstado,
+          equipa_id: formPerfil === 'Agente' ? Number(formEquipaId) : null,
           password: formPassword,
         };
         const created = await utilizadoresService.criar(dadosCreate);
@@ -169,12 +182,7 @@ export function GestaoUtilizadores() {
     } catch (err) {
       if (err instanceof NetworkError || err.isNetworkError) {
         toast.error('Sem ligação. Não foi possível desactivar.');
-      } else {
-        // Fallback local caso mock/backend retorne erro mas permita operação
-        setUtilizadores(prev => prev.map(u => u.id === confirm.id ? { ...u, estado: 'Inactivo' } : u));
-        toast.success('Utilizador desactivado.');
-        setConfirm(null);
-      }
+      } else toast.error(err.message || 'Não foi possível desactivar o utilizador.');
     } finally {
       setIsSubmitting(false);
     }
@@ -197,6 +205,8 @@ export function GestaoUtilizadores() {
         <StatCard icon="UserCheck" label="Activos" value={utilizadores.filter(u => u.estado === 'Activo').length} tone="green" />
         <StatCard icon="UserX" label="Inactivos" value={utilizadores.filter(u => u.estado === 'Inactivo').length} tone="red" />
       </div>
+
+      {loadError && <Card role="alert" className="p-3 text-sm text-red-700 dark:text-red-300">{loadError}</Card>}
 
       <Card className="p-4">
         <div className="grid md:grid-cols-3 gap-3">
@@ -224,7 +234,7 @@ export function GestaoUtilizadores() {
       </Card>
 
       <Card>
-        {slice.length === 0 ? (
+        {loading ? <p role="status" className="p-5 text-sm text-muted">A carregar utilizadores…</p> : slice.length === 0 ? (
           <EmptyState icon="UserX" title="Nenhum utilizador encontrado" />
         ) : (
           <>
@@ -382,6 +392,13 @@ export function GestaoUtilizadores() {
               </select>
             </Field>
           </div>
+
+          {formPerfil === 'Agente' && <Field label="Equipa operacional" required htmlFor="user-equipa" error={fieldErrors.equipa_id}>
+            <select id="user-equipa" className={inputCls} value={formEquipaId} onChange={event => setFormEquipaId(event.target.value)}>
+              <option value="">Seleccionar equipa</option>
+              {equipas.map(team => <option key={team.id} value={team.id}>{team.nome}</option>)}
+            </select>
+          </Field>}
 
           {modal?.mode === 'create' && (
             <Field 

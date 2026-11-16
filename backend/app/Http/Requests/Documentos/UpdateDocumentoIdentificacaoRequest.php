@@ -30,7 +30,7 @@ class UpdateDocumentoIdentificacaoRequest extends SingeFormRequest
         }
 
         return [
-            'tipo_documento' => ['sometimes', 'required', 'string', 'max:50'],
+            'tipo_documento' => ['sometimes', 'required', Rule::in(['BI', 'Passaporte'])],
             'numero_documento' => [
                 'sometimes',
                 'required',
@@ -56,6 +56,7 @@ class UpdateDocumentoIdentificacaoRequest extends SingeFormRequest
         $documento = $this->route('documentoIdentificacao');
 
         return parent::authorize()
+            && $this->userHasAnyProfile(['Cidadão'])
             && $documento instanceof DocumentoIdentificacao
             && (int) $documento->utilizador_id === (int) $this->user()->getAuthIdentifier();
     }

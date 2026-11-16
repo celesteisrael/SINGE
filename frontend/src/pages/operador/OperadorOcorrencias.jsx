@@ -1,151 +1,254 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Icon from '../../components/common/Icon';
-import { Card, Button, StatusBadge, PrioBadge, Pagination, EmptyState, inputCls } from '../../components/common/CommonComponents';
-import { useToast } from '../../contexts/ToastContext';
+import { Card, StatusBadge, Pagination, EmptyState, inputCls } from '../../components/common/CommonComponents';
 
-export function OperadorOcorrencias({ setPage, setSelected, ocorrencias }) {
-  const toast = useToast();
-  const [q, setQ] = useState('');
-  const [tipo, setTipo] = useState('');
-  const [prov, setProv] = useState('');
-  const [est, setEst] = useState('');
-  const [pg, setPg] = useState(1);
-  const pageSize = 6;
+const STATES = [
+  ['registada', 'Registada'],
+  ['em_avaliacao', 'Em avaliação'],
+  ['em_atendimento', 'Em atendimento'],
+  ['resolvida', 'Resolvida'],
+  ['cancelada', 'Cancelada'],
+];
 
-  const filtered = (ocorrencias || []).filter(o =>
-    (!q || (o.ref && o.ref.toLowerCase().includes(q.toLowerCase())) || 
-           (o.titulo && o.titulo.toLowerCase().includes(q.toLowerCase())) || 
-           (o.descricao && o.descricao.toLowerCase().includes(q.toLowerCase()))) &&
-    (!tipo || o.tipo === tipo) && 
-    (!prov || o.provincia === prov) &&
-    (!est || o.estado === est)
-  );
-  const slice = filtered.slice((pg - 1) * pageSize, pg * pageSize);
+const STATE_LABELS = Object.fromEntries(STATES);
 
-  const handleValidar = (o, e) => {
-    e.stopPropagation();
-    toast.success(`Ocorrência ${o.ref} validada com sucesso! Encaminhada para avaliação da Coordenação.`);
+function formatDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : new Intl.DateTimeFormat('pt-MZ', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+export function OperadorOcorrencias({
+  ocorrencias = [],
+  pagination,
+  filters,
+  types = [],
+  loading,
+  error,
+  onRefresh,
+  onFiltersChange,
+  onSelect,
+}) {
+  const [query, setQuery] = useState(filters.q || '');
+
+  useEffect(() => {
+    setQuery(filters.q || '');
+  }, [filters.q]);
+
+  const submitSearch = (event) => {
+    event.preventDefault();
+    onFiltersChange({ q: query.trim(), page: 1 });
   };
 
-  const handleSolicitarInfo = (o, e) => {
-    e.stopPropagation();
-    toast.info(`Pedido de esclarecimentos emitido para a ocorrência ${o.ref}.`);
-  };
+  const setFilter = (key, value) => onFiltersChange({ [key]: value, page: 1 });
 
   return (
     <div className="space-y-4">
-      {/* Cabeçalho */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-semibold uppercase tracking-wider">
-              Posto de Atendimento
-            </span>
-          </div>
-          <h2 className="text-xl font-bold text-ink dark:text-dink mt-1">Fila de Triagem e Ocorrências</h2>
-          <p className="text-sm text-muted dark:text-dmuted">
-            {filtered.length} ocorrências na fila. Valide os dados e encaminhe para a decisão operacional do Coordenador.
+          <h1 className="text-2xl font-bold text-ink dark:text-dink">Ocorrências</h1>
+          <p className="text-sm text-muted dark:text-dmuted mt-1">
+            {pagination?.total ?? 0} registo(s) encontrados na base de dados.
           </p>
         </div>
-        <Button icon="PlusCircle" onClick={() => setPage('registar')}>Registar Nova Ocorrência</Button>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          aria-label="Actualizar ocorrências"
+          className="p-2 rounded-lg border border-bd dark:border-dborder text-ink dark:text-dink disabled:opacity-50"
+        >
+          <Icon name="RefreshCw" size={18} />
+        </button>
       </div>
 
-      {/* Filtros de Triagem */}
       <Card className="p-4">
-        <div className="grid md:grid-cols-4 gap-3">
+        <form onSubmit={submitSearch} className="grid md:grid-cols-3 xl:grid-cols-4 gap-3">
           <div className="relative md:col-span-2">
             <Icon name="Search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted dark:text-dmuted pointer-events-none" />
-            <input 
-              placeholder="Pesquisar por ref, título ou descrição..." 
-              value={q} 
-              onChange={e => { setQ(e.target.value); setPg(1); }} 
-              className={inputCls + ' pl-9'} 
+            <input
+              aria-label="Pesquisar ocorrências"
+              placeholder="Pesquisar por identificador, título, descrição ou localização"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              className={`${inputCls} pl-9`}
             />
           </div>
-          <select value={tipo} onChange={e => { setTipo(e.target.value); setPg(1); }} className={inputCls}>
-            <option value="">Todos os tipos de evento</option>
-            {[...new Set((ocorrencias || []).map(o => o.tipo).filter(Boolean))].map(t => <option key={t}>{t}</option>)}
+          <select
+            aria-label="Filtrar por estado"
+            value={filters.estado || ''}
+            onChange={event => setFilter('estado', event.target.value)}
+            className={inputCls}
+          >
+            <option value="">Todos os estados</option>
+            {STATES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <select value={prov} onChange={e => { setProv(e.target.value); setPg(1); }} className={inputCls}>
-            <option value="">Todas as províncias</option>
-            {[...new Set((ocorrencias || []).map(o => o.provincia).filter(Boolean))].map(p => <option key={p}>{p}</option>)}
+          <select
+            aria-label="Filtrar por tipo"
+            value={filters.tipo_ocorrencia_id || ''}
+            onChange={event => setFilter('tipo_ocorrencia_id', event.target.value)}
+            className={inputCls}
+          >
+            <option value="">Todos os tipos</option>
+            {types.map(type => <option key={type.id} value={type.id}>{type.nome}</option>)}
           </select>
-        </div>
+          <input
+            aria-label="Filtrar por província"
+            placeholder="Província"
+            value={filters.provincia || ''}
+            onChange={event => setFilter('provincia', event.target.value)}
+            className={inputCls}
+          />
+          <input
+            aria-label="Filtrar por distrito"
+            placeholder="Distrito"
+            value={filters.distrito || ''}
+            onChange={event => setFilter('distrito', event.target.value)}
+            className={inputCls}
+          />
+          <input
+            aria-label="Filtrar por localização"
+            placeholder="Localização"
+            value={filters.localizacao || ''}
+            onChange={event => setFilter('localizacao', event.target.value)}
+            className={inputCls}
+          />
+          <label className="text-xs text-muted dark:text-dmuted">
+            Desde
+            <input
+              type="date"
+              aria-label="Data inicial"
+              value={filters.data_inicio || ''}
+              onChange={event => setFilter('data_inicio', event.target.value)}
+              className={`${inputCls} mt-1`}
+            />
+          </label>
+          <label className="text-xs text-muted dark:text-dmuted">
+            Até
+            <input
+              type="date"
+              aria-label="Data final"
+              value={filters.data_fim || ''}
+              onChange={event => setFilter('data_fim', event.target.value)}
+              className={`${inputCls} mt-1`}
+            />
+          </label>
+          <label className="text-xs text-muted dark:text-dmuted">
+            Ordenar por
+            <select
+              aria-label="Ordenar por"
+              value={filters.ordenar_por || 'created_at'}
+              onChange={event => setFilter('ordenar_por', event.target.value)}
+              className={`${inputCls} mt-1`}
+            >
+              <option value="created_at">Data de registo</option>
+              <option value="updated_at">Última actualização</option>
+              <option value="id">Identificador</option>
+            </select>
+          </label>
+          <label className="text-xs text-muted dark:text-dmuted">
+            Ordem
+            <select
+              aria-label="Ordem"
+              value={filters.ordem || 'desc'}
+              onChange={event => setFilter('ordem', event.target.value)}
+              className={`${inputCls} mt-1`}
+            >
+              <option value="desc">Mais recentes primeiro</option>
+              <option value="asc">Mais antigos primeiro</option>
+            </select>
+          </label>
+          <div className="flex items-end gap-2">
+            <button type="submit" className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white">
+              Pesquisar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('');
+                onFiltersChange({
+                  q: '',
+                  estado: '',
+                  tipo_ocorrencia_id: '',
+                  provincia: '',
+                  distrito: '',
+                  localizacao: '',
+                  data_inicio: '',
+                  data_fim: '',
+                  ordenar_por: 'created_at',
+                  ordem: 'desc',
+                  page: 1,
+                });
+              }}
+              className="rounded-lg border border-bd dark:border-dborder px-4 py-2 text-sm text-ink dark:text-dink"
+            >
+              Limpar
+            </button>
+          </div>
+        </form>
       </Card>
 
-      {/* Tabela de Ocorrências com Triagem Rápida */}
       <Card>
-        {slice.length === 0 ? (
-          <EmptyState icon="FileText" title="Nenhuma ocorrência encontrada para os filtros selecionados" />
+        {error ? (
+          <div className="p-5" role="alert">
+            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            <button type="button" onClick={onRefresh} className="mt-2 text-sm text-brand underline">Tentar novamente</button>
+          </div>
+        ) : loading ? (
+          <p className="p-5 text-sm text-muted dark:text-dmuted">A carregar ocorrências…</p>
+        ) : ocorrencias.length === 0 ? (
+          <EmptyState icon="FileText" title="Nenhuma ocorrência encontrada" description="Altere os filtros ou tente novamente." />
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[900px]">
+              <table className="w-full text-sm min-w-[820px]">
                 <thead className="bg-light dark:bg-dsidebar/50 text-xs uppercase text-muted dark:text-dmuted">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium">Ref</th>
-                    <th className="text-left px-4 py-3 font-medium">Tipo de Evento</th>
-                    <th className="text-left px-4 py-3 font-medium">Título e Descrição</th>
-                    <th className="text-left px-4 py-3 font-medium">Localização</th>
-                    <th className="text-left px-4 py-3 font-medium">Fonte Denúncia</th>
-                    <th className="text-left px-4 py-3 font-medium">Estado</th>
-                    <th className="text-left px-4 py-3 font-medium">Prioridade</th>
-                    <th className="text-right px-4 py-3 font-medium">Ações de Triagem</th>
+                    {['ID', 'Tipo', 'Título e descrição', 'Localização', 'Data/hora', 'Estado', ''].map(heading => (
+                      <th key={heading} className="text-left px-4 py-3 font-medium whitespace-nowrap">{heading}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-bd dark:divide-dborder">
-                  {slice.map(o => (
-                    <tr 
-                      key={o.ref || o.id} 
-                      data-testid="oc-row" 
-                      data-ref={o.ref || o.id} 
-                      className="hover:bg-light dark:hover:bg-dsidebar/30 transition-colors"
-                    >
-                      <td className="px-4 py-3 font-mono font-medium text-ink dark:text-dink whitespace-nowrap text-xs">{o.ref}</td>
-                      <td className="px-4 py-3 font-medium text-ink dark:text-dink whitespace-nowrap">{o.tipo}</td>
+                  {ocorrencias.map(occurrence => (
+                    <tr key={occurrence.id} data-testid="operator-occurrence-row" className="hover:bg-light dark:hover:bg-dsidebar/30">
+                      <td className="px-4 py-3 font-mono text-xs font-medium text-ink dark:text-dink">#{occurrence.id}</td>
+                      <td className="px-4 py-3 text-ink dark:text-dink">{occurrence.tipo_ocorrencia?.nome || '—'}</td>
                       <td className="px-4 py-3 max-w-xs">
-                        <p className="font-semibold text-ink dark:text-dink truncate">{o.titulo}</p>
-                        <p className="text-xs text-muted dark:text-dmuted truncate">{o.descricao}</p>
+                        <p className="font-medium text-ink dark:text-dink truncate">{occurrence.titulo}</p>
+                        <p className="text-xs text-muted dark:text-dmuted truncate">{occurrence.descricao}</p>
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted dark:text-dmuted whitespace-nowrap">{o.distrito}, {o.provincia}</td>
-                      <td className="px-4 py-3 text-xs text-muted dark:text-dmuted whitespace-nowrap">{o.fonte}</td>
-                      <td className="px-4 py-3 whitespace-nowrap"><StatusBadge s={o.estado} /></td>
-                      <td className="px-4 py-3 whitespace-nowrap"><PrioBadge p={o.prioridade} /></td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1.5">
-                          {o.estado === 'Nova' || o.estado === 'Em análise' ? (
-                            <>
-                              <button
-                                onClick={(e) => handleSolicitarInfo(o, e)}
-                                className="p-1.5 rounded-lg border border-bd dark:border-dborder text-xs text-ink dark:text-dink hover:bg-light dark:hover:bg-dsidebar transition-colors"
-                                title="Pedir dados complementares"
-                              >
-                                <Icon name="MessageSquare" size={14} />
-                              </button>
-                              <button
-                                onClick={(e) => handleValidar(o, e)}
-                                className="px-2.5 py-1 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold shadow-sm transition-colors flex items-center gap-1"
-                                title="Confirmar dados e enviar para Coordenação"
-                              >
-                                <Icon name="CheckCircle" size={13} /> Validar
-                              </button>
-                            </>
-                          ) : null}
-                          <button 
-                            onClick={() => { setSelected(o); setPage('detalhe-oc'); }} 
-                            className="p-1.5 rounded-lg text-brand dark:text-dblue hover:bg-lblue dark:hover:bg-dsidebar transition-colors"
-                            title="Consultar Detalhes"
-                          >
-                            <Icon name="Eye" size={16} />
-                          </button>
-                        </div>
+                      <td className="px-4 py-3 text-xs text-muted dark:text-dmuted">
+                        {[occurrence.localizacao_geografica?.distrito, occurrence.localizacao_geografica?.provincia]
+                          .filter(Boolean).join(', ') || occurrence.localizacao || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted dark:text-dmuted whitespace-nowrap">{formatDate(occurrence.created_at)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap"><StatusBadge s={STATE_LABELS[occurrence.estado] || occurrence.estado} /></td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onSelect(occurrence.id)}
+                          aria-label={`Consultar ocorrência ${occurrence.id}`}
+                          className="p-1.5 rounded text-brand dark:text-dblue"
+                        >
+                          <Icon name="Eye" size={16} />
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Pagination total={filtered.length} page={pg} pageSize={pageSize} onChange={setPg} />
+            <div className="p-4 border-t border-bd dark:border-dborder">
+              <Pagination
+                total={pagination?.total || 0}
+                page={pagination?.current_page || 1}
+                pageSize={pagination?.per_page || 15}
+                onChange={page => onFiltersChange({ page })}
+              />
+            </div>
           </>
         )}
       </Card>

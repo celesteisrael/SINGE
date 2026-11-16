@@ -7,6 +7,11 @@ use Illuminate\Validation\Rule;
 
 class StoreDocumentoIdentificacaoRequest extends SingeFormRequest
 {
+    public function authorize(): bool
+    {
+        return parent::authorize() && $this->userHasAnyProfile(['Cidadão']);
+    }
+
     /** @return array<string, mixed> */
     public function rules(): array
     {
@@ -16,7 +21,7 @@ class StoreDocumentoIdentificacaoRequest extends SingeFormRequest
         }
 
         return [
-            'tipo_documento' => ['required', 'string', 'max:50'],
+            'tipo_documento' => ['required', 'string', Rule::in(['BI', 'Passaporte'])],
             'numero_documento' => [
                 'required',
                 'string',
@@ -28,7 +33,7 @@ class StoreDocumentoIdentificacaoRequest extends SingeFormRequest
             'data_nascimento' => ['nullable', 'date', 'before_or_equal:today'],
             'data_emissao' => ['nullable', 'date', 'before_or_equal:today'],
             'data_validade' => $dataValidadeRules,
-            'ficheiro' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
+            'ficheiro' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
             'utilizador_id' => ['prohibited'],
             'estado_verificacao' => ['prohibited'],
             'caminho_documento' => ['prohibited'],

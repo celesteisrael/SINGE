@@ -3,12 +3,17 @@
 namespace App\Models;
 
 use App\Enums\EstadoMissao;
+use Database\Factories\MissaoFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Missao extends Model
 {
+    /** @use HasFactory<MissaoFactory> */
+    use HasFactory;
+
     protected $table = 'missoes';
 
     protected $fillable = [
@@ -20,6 +25,10 @@ class Missao extends Model
         'data_inicio',
         'data_conclusao',
         'observacoes',
+        'objectivos',
+        'instrucoes',
+        'data_prevista_conclusao',
+        'coordenador_id',
     ];
 
     protected function casts(): array
@@ -29,6 +38,7 @@ class Missao extends Model
             'data_atribuicao' => 'datetime',
             'data_inicio' => 'datetime',
             'data_conclusao' => 'datetime',
+            'data_prevista_conclusao' => 'datetime',
         ];
     }
 
@@ -54,6 +64,12 @@ class Missao extends Model
             Equipa::class,
             'equipa_id'
         );
+    }
+
+    /** @return HasMany<HistoricoMissao, $this> */
+    public function historico(): HasMany
+    {
+        return $this->hasMany(HistoricoMissao::class)->latest();
     }
 
     /** @return HasMany<Notificacao, $this> */

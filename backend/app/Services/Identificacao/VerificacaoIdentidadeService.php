@@ -3,6 +3,7 @@
 namespace App\Services\Identificacao;
 
 use App\Models\DocumentoIdentificacao;
+use App\Models\HistoricoVerificacaoIdentidade;
 use App\Models\Perfil;
 use App\Models\User;
 use App\Models\VerificacaoIdentidade;
@@ -13,7 +14,7 @@ use InvalidArgumentException;
 
 class VerificacaoIdentidadeService
 {
-    private const PERFIS_VERIFICADORES = ['Administrador', 'Coordenador'];
+    private const PERFIS_VERIFICADORES = ['Operador'];
 
     /** @param array<string, mixed> $dados */
     public function criar(array $dados, User $solicitante): VerificacaoIdentidade
@@ -29,7 +30,14 @@ class VerificacaoIdentidadeService
                 throw new AuthorizationException('Só o titular do documento pode solicitar a sua verificação.');
             }
 
-            return VerificacaoIdentidade::query()->create([
+            $existing = VerificacaoIdentidade::query()
+                ->where('documento_identificacao_id', $documento->id)
+                ->where('utilizador_solicitante_id', $solicitante->id)
+                ->whereIn('estado', ['PENDENTE', 'EM_ANALISE'])
+                ->latest()->first();
+            if ($existing) return $existing;
+
+            $verification = VerificacaoIdentidade::query()->create([
                 'documento_identificacao_id' => $documento->id,
                 'utilizador_solicitante_id' => $solicitante->id,
                 'utilizador_verificador_id' => null,
@@ -38,6 +46,9 @@ class VerificacaoIdentidadeService
                 'motivo_rejeicao' => null,
                 'data_verificacao' => null,
             ]);
+            $this->registarHistorico($verification, $solicitante, null, 'PENDENTE');
+
+            return $verification;
         });
     }
 
@@ -69,6 +80,7 @@ class VerificacaoIdentidadeService
             $actual->estado = 'EM_ANALISE';
             $actual->utilizador_verificador_id = $verificador->id;
             $actual->save();
+            $this->registarHistorico($actual, $verificador, 'PENDENTE', 'EM_ANALISE');
 
             return $actual->fresh(['documentoIdentificacao', 'utilizadorVerificador']);
         });
@@ -88,6 +100,15 @@ class VerificacaoIdentidadeService
         return $this->decidir($verificacao, $verificador, 'REJEITADA', $motivo, $observacoes);
     }
 
+    public function solicitarCorrecao(VerificacaoIdentidade $verificacao, User $verificador, string $motivo, ?string $observacoes = null): VerificacaoIdentidade
+    {
+        if (trim($motivo) === '') {
+            throw new InvalidArgumentException('O motivo da correcção é obrigatório.');
+        }
+
+        return $this->decidir($verificacao, $verificador, 'CORRECAO_NECESSARIA', $motivo, $observacoes);
+    }
+
     private function decidir(
         VerificacaoIdentidade $verificacao,
         User $verificador,
@@ -103,8 +124,11 @@ class VerificacaoIdentidadeService
                 ->lockForUpdate()
                 ->findOrFail($verificacao->id);
 
-            if (! in_array($actual->estado, ['PENDENTE', 'EM_ANALISE'], true)) {
-                throw new InvalidArgumentException('A verificação já possui uma decisão final e não pode ser alterada.');
+            if ($actual->estado !== 'EM_ANALISE') {
+                if (in_array($actual->estado, ['APROVADA', 'REJEITADA', 'CORRECAO_NECESSARIA'], true)) {
+                    throw new InvalidArgumentException('A verificação já possui uma decisão final e não pode ser alterada.');
+                }
+                throw new InvalidArgumentException('Inicie a análise antes de registar uma decisão.');
             }
 
             $documentoActual = $actual->documentoIdentificacao;
@@ -117,12 +141,14 @@ class VerificacaoIdentidadeService
                 throw new AuthorizationException('A decisão deve ser concluída pelo responsável que iniciou a análise.');
             }
 
+            $estadoAnterior = $actual->estado;
             $actual->estado = $resultado;
             $actual->utilizador_verificador_id = $verificador->id;
             $actual->motivo_rejeicao = $motivo;
             $actual->observacoes = $observacoes ?? $actual->observacoes;
             $actual->data_verificacao = now();
             $actual->save();
+            $this->registarHistorico($actual, $verificador, $estadoAnterior, $resultado, $motivo, $observacoes);
 
             $documento = DocumentoIdentificacao::query()
                 ->lockForUpdate()
@@ -132,6 +158,24 @@ class VerificacaoIdentidadeService
 
             return $actual->fresh(['documentoIdentificacao', 'utilizadorVerificador']);
         });
+    }
+
+    private function registarHistorico(
+        VerificacaoIdentidade $verification,
+        User $actor,
+        ?string $previous,
+        string $next,
+        ?string $reason = null,
+        ?string $observations = null,
+    ): void {
+        HistoricoVerificacaoIdentidade::query()->create([
+            'verificacao_identidade_id' => $verification->id,
+            'utilizador_id' => $actor->id,
+            'estado_anterior' => $previous,
+            'estado_novo' => $next,
+            'motivo' => $reason,
+            'observacoes' => $observations,
+        ]);
     }
 
     private function autorizarVerificador(User $utilizador): void
