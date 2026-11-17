@@ -17,7 +17,7 @@ class ValidacaoOcorrenciaController extends SingeApiController
             fn (): array => $this->attributes(
                 $service->criar($request->validated(), $this->authenticatedUser($request)),
                 [
-                    'id', 'ocorrencia_id', 'utilizador_id', 'estado',
+                    'id', 'ocorrencia_id', 'ocorrencia_original_id', 'utilizador_id', 'estado',
                     'observacoes', 'motivo', 'data_validacao', 'created_at',
                 ],
             ),

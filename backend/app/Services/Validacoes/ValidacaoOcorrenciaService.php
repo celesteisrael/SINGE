@@ -23,7 +23,12 @@ class ValidacaoOcorrenciaService
         'DUPLICADA',
     ];
 
-    private const ESTADOS_OPERADOR = ['VALIDADA', 'NAO_CONFIRMADA', 'REJEITADA'];
+    private const ESTADOS_OPERADOR = [
+        'VALIDADA',
+        'NAO_CONFIRMADA',
+        'REJEITADA',
+        'DUPLICADA',
+    ];
 
     /** @param array<string, mixed> $dados */
     public function criar(array $dados, User $utilizador): ValidacaoOcorrencia
@@ -49,18 +54,110 @@ class ValidacaoOcorrenciaService
             throw new InvalidArgumentException('A justificação é obrigatória quando a ocorrência não é confirmada ou é rejeitada.');
         }
 
-        return DB::transaction(function () use ($dados, $estado, $ocorrenciaId, $utilizador): ValidacaoOcorrencia {
-            Ocorrencia::query()->lockForUpdate()->findOrFail((int) $ocorrenciaId);
+        $ocorrenciaOriginalId = $dados['ocorrencia_original_id'] ?? null;
+
+        if ($estado === 'DUPLICADA') {
+            if (
+                ! is_scalar($ocorrenciaOriginalId)
+                || filter_var($ocorrenciaOriginalId, FILTER_VALIDATE_INT) === false
+            ) {
+                throw new InvalidArgumentException(
+                    'É obrigatório indicar a ocorrência original.'
+                );
+            }
+
+            if ((int) $ocorrenciaOriginalId === (int) $ocorrenciaId) {
+                throw new InvalidArgumentException(
+                    'Uma ocorrência não pode ser duplicada de si própria.'
+                );
+            }
+        } elseif ($ocorrenciaOriginalId !== null) {
+            throw new InvalidArgumentException(
+                'A ocorrência original só pode ser indicada para validações DUPLICADA.'
+            );
+        }
+
+        return DB::transaction(function () use (
+            $dados,
+            $estado,
+            $ocorrenciaId,
+            $ocorrenciaOriginalId,
+            $utilizador
+        ): ValidacaoOcorrencia {
+            $ids = [(int) $ocorrenciaId];
+
+            if ($estado === 'DUPLICADA') {
+                $ids[] = (int) $ocorrenciaOriginalId;
+            }
+
+            // Bloquear as ocorrências por ordem de ID.
+            // Isto ajuda a evitar conflitos entre operações simultâneas.
+            sort($ids);
+
+            $ocorrencias = Ocorrencia::query()
+                ->whereIn('id', $ids)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            $ocorrencia = $ocorrencias->get((int) $ocorrenciaId);
+
+            if (! $ocorrencia) {
+                throw new InvalidArgumentException(
+                    'A ocorrência indicada não existe.'
+                );
+            }
+
+            if ($estado === 'DUPLICADA') {
+                $original = $ocorrencias->get((int) $ocorrenciaOriginalId);
+
+                if (! $original) {
+                    throw new InvalidArgumentException(
+                        'A ocorrência original indicada não existe.'
+                    );
+                }
+
+                // Consultar a última decisão de validação da ocorrência original.
+                $ultimaValidacaoOriginal = ValidacaoOcorrencia::query()
+                    ->where('ocorrencia_id', $original->id)
+                    ->orderByDesc('created_at')
+                    ->orderByDesc('id')
+                    ->first();
+
+                if ($ultimaValidacaoOriginal?->estado === 'DUPLICADA') {
+                    throw new InvalidArgumentException(
+                        'A ocorrência escolhida já está identificada como duplicada. Seleccione a ocorrência original.'
+                    );
+                }
+
+                // Não permitir transformar em duplicada uma ocorrência
+                // que já serve de original a outras ocorrências.
+                $temDuplicadasAssociadas = $ocorrencia->validacoesComoOriginal()
+                    ->where('estado', 'DUPLICADA')
+                    ->exists();
+
+                if ($temDuplicadasAssociadas) {
+                    throw new InvalidArgumentException(
+                        'Esta ocorrência já está associada a outras duplicadas e não pode ser marcada como duplicada.'
+                    );
+                }
+            }
 
             return ValidacaoOcorrencia::query()->create([
                 'ocorrencia_id' => (int) $ocorrenciaId,
+                'ocorrencia_original_id' => $estado === 'DUPLICADA'
+                    ? (int) $ocorrenciaOriginalId
+                    : null,
                 'utilizador_id' => $utilizador->id,
                 'estado' => $estado,
                 'observacoes' => $dados['observacoes'] ?? null,
                 'motivo' => $dados['motivo'] ?? null,
-                'data_validacao' => in_array($estado, ['VALIDADA', 'NAO_CONFIRMADA', 'REJEITADA', 'DUPLICADA'], true)
-                    ? now()
-                    : null,
+                'data_validacao' => in_array(
+                    $estado,
+                    ['VALIDADA', 'NAO_CONFIRMADA', 'REJEITADA', 'DUPLICADA'],
+                    true
+                ) ? now() : null,
             ]);
         });
     }
