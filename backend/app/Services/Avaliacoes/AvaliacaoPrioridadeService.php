@@ -19,8 +19,11 @@ use RuntimeException;
 
 class AvaliacaoPrioridadeService
 {
-    private const PERFIS_AVALIADORES = ['Administrador', 'Coordenador'];
-
+    private const PERFIS_AVALIADORES = [
+        'Administrador',
+        'Coordenador',
+        'Operador',
+    ];
     /**
      * @var array<string, float>
      */

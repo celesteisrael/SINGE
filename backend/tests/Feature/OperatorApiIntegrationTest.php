@@ -168,7 +168,8 @@ it('allows an operator to register an institutional occurrence under their own i
 
     $this->actingAs($operator, 'sanctum')
         ->postJson('/api/avaliacoes-prioridade', [])
-        ->assertForbidden();
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['ocorrencia_id', 'factores']);
 });
 
 it('returns operator detail with minimal communicator, evidence, validation and history actors', function () {
@@ -275,9 +276,10 @@ it('denies operators generic occurrence changes, priority evaluation, missions a
     $this->actingAs($operator, 'sanctum')
         ->patchJson('/api/ocorrencias/'.$occurrence->id.'/estado', ['estado' => 'resolvida'])
         ->assertForbidden();
-    $this->actingAs($operator, 'sanctum')
+   $this->actingAs($operator, 'sanctum')
         ->postJson('/api/avaliacoes-prioridade', [])
-        ->assertForbidden();
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['ocorrencia_id', 'factores']);
     $this->actingAs($operator, 'sanctum')
         ->postJson('/api/missoes', [])
         ->assertForbidden();
