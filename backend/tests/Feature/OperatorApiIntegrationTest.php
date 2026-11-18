@@ -16,6 +16,7 @@ use App\Services\Localizacoes\LocalizacaoService;
 use App\Services\Ocorrencias\OcorrenciaService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 
 function operatorApiUser(string $profile): User
 {
@@ -371,3 +372,124 @@ it('denies operators generic occurrence changes, priority evaluation, missions a
         ->and(fn () => (new LocalizacaoService)->criar([], $operator))
         ->toThrow(AuthorizationException::class);
 });
+
+
+it('returns deterministic and semantic duplicate suggestions when an operator registers an occurrence', function () {
+    config([
+        'services.ollama.enabled' => true,
+        'services.ollama.base_url' => 'http://localhost:11434',
+        'services.ollama.model' => 'qwen3:1.7b',
+    ]);
+
+    $operator = operatorApiUser('Operador');
+    $citizen = operatorApiUser('Cidadão');
+
+    [$candidate, $type] = operatorApiOccurrence(
+        $citizen,
+        'Cheia no bairro central'
+    );
+
+    $candidate->forceFill([
+        'latitude' => -25.9655,
+        'longitude' => 32.5832,
+        'data_ocorrencia' => now()->subMinutes(6),
+    ])->save();
+
+    Http::fake([
+        '*' => Http::response([
+            'message' => [
+                'content' => json_encode([
+                    'resultados' => [
+                        [
+                            'id' => $candidate->id,
+                            'semelhanca' => 95,
+                            'possivel_duplicado' => true,
+                            'justificacao' => 'Os relatos descrevem aparentemente a mesma cheia.',
+                        ],
+                    ],
+                ], JSON_UNESCAPED_UNICODE),
+            ],
+        ], 200),
+    ]);
+
+    $response = $this->actingAs($operator, 'sanctum')
+        ->postJson('/api/operador/ocorrencias', [
+            'titulo' => 'Cheia no bairro central',
+            'descricao' => 'Subida rápida do nível da água no bairro central.',
+            'localizacao' => 'Bairro Central',
+            'latitude' => -25.9656,
+            'longitude' => 32.5832,
+            'tipo_ocorrencia_id' => $type->id,
+            'origem' => 'telefone',
+            'comunicante_nome' => 'Comunicante de teste',
+            'comunicante_contacto' => '+258 840000000',
+            'data_ocorrencia' => now()->subMinutes(5)->toDateTimeString(),
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.possiveis_duplicados.0.id', $candidate->id)
+        ->assertJsonPath(
+            'data.possiveis_duplicados.0.analise_semantica.possivel_duplicado',
+            true
+        )
+        ->assertJsonPath(
+            'data.possiveis_duplicados.0.analise_semantica.semelhanca',
+            95
+        );
+
+    $newOccurrenceId = $response->json('data.id');
+
+    expect(Ocorrencia::query()->findOrFail($newOccurrenceId)->utilizador_id)
+        ->toBe($operator->id)
+        ->and(ValidacaoOcorrencia::query()->count())->toBe(0);
+});
+
+it('registers an operator occurrence even when semantic duplicate analysis fails', function () {
+    config([
+        'services.ollama.enabled' => true,
+        'services.ollama.base_url' => 'http://localhost:11434',
+        'services.ollama.model' => 'qwen3:1.7b',
+    ]);
+
+    $operator = operatorApiUser('Operador');
+    $citizen = operatorApiUser('Cidadão');
+
+    [$candidate, $type] = operatorApiOccurrence(
+        $citizen,
+        'Incêndio numa residência'
+    );
+
+    $candidate->forceFill([
+        'latitude' => -25.9655,
+        'longitude' => 32.5832,
+        'data_ocorrencia' => now()->subMinutes(6),
+    ])->save();
+
+    Http::fake([
+        '*' => Http::response([
+            'error' => 'Ollama indisponível.',
+        ], 500),
+    ]);
+
+    $response = $this->actingAs($operator, 'sanctum')
+        ->postJson('/api/operador/ocorrencias', [
+            'titulo' => 'Incêndio numa residência',
+            'descricao' => 'Fogo numa residência no bairro central.',
+            'localizacao' => 'Bairro Central',
+            'latitude' => -25.9656,
+            'longitude' => 32.5832,
+            'tipo_ocorrencia_id' => $type->id,
+            'origem' => 'telefone',
+            'data_ocorrencia' => now()->subMinutes(5)->toDateTimeString(),
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.possiveis_duplicados.0.id', $candidate->id)
+        ->assertJsonPath(
+            'data.possiveis_duplicados.0.analise_semantica',
+            null
+        );
+
+    expect(Ocorrencia::query()->findOrFail($response->json('data.id')))
+        ->not->toBeNull()
+        ->and(ValidacaoOcorrencia::query()->count())->toBe(0);
+});
+
