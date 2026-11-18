@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use App\Services\Ocorrencias\DeteccaoDuplicadosService;
 use Illuminate\Support\Facades\Log;
 use Throwable;
+use App\Services\Ocorrencias\AnaliseSemanticaDuplicadosService;
 
 class OcorrenciaController extends SingeApiController
 {
@@ -103,13 +104,19 @@ class OcorrenciaController extends SingeApiController
         );
     }
 
-    public function storeForOperator(
+   public function storeForOperator(
         StoreOperatorOcorrenciaRequest $request,
         OcorrenciaService $service,
         DeteccaoDuplicadosService $detector,
+        AnaliseSemanticaDuplicadosService $analiseSemantica,
     ): JsonResponse {
         return $this->execute(
-            function () use ($request, $service, $detector): array {
+            function () use (
+                $request,
+                $service,
+                $detector,
+                $analiseSemantica,
+            ): array {
                 // 1. Registar a ocorrência normalmente.
                 $ocorrencia = $service->criar(
                     $request->validated(),
@@ -120,10 +127,11 @@ class OcorrenciaController extends SingeApiController
                 $details = $this->detalhes($ocorrencia, true);
 
                 // 3. Procurar possíveis duplicados.
-                // Esta operação não pode impedir o registo.
+                // A falha da detecção ou da IA não pode impedir o registo.
                 $details['possiveis_duplicados'] = $this->buscarDuplicados(
                     $ocorrencia,
                     $detector,
+                    $analiseSemantica,
                 );
 
                 return $details;
@@ -199,17 +207,34 @@ class OcorrenciaController extends SingeApiController
     /**
      * Procura possíveis ocorrências duplicadas sem comprometer o registo.
      *
+     * Primeiro utiliza a detecção determinística.
+     * Depois complementa os resultados com a análise semântica.
+     *
      * @return array<int, array<string, mixed>>
      */
     private function buscarDuplicados(
         Ocorrencia $ocorrencia,
         DeteccaoDuplicadosService $detector,
+        AnaliseSemanticaDuplicadosService $analiseSemantica,
     ): array {
         try {
+            // 1. Obter candidatos através das regras determinísticas.
             $candidatas = $detector->buscarCandidatas($ocorrencia);
 
+            if ($candidatas === []) {
+                return [];
+            }
+
+            // 2. Analisar semanticamente os candidatos.
+            // Se a IA falhar, o serviço devolve uma lista vazia.
+            $analises = $analiseSemantica->analisar(
+                $ocorrencia,
+                $candidatas,
+            );
+
+            // 3. Combinar os resultados sem perder os candidatos originais.
             return collect($candidatas)
-                ->map(function (array $candidata): array {
+                ->map(function (array $candidata) use ($analises): array {
                     /** @var Ocorrencia $possivelDuplicado */
                     $possivelDuplicado = $candidata['ocorrencia'];
 
@@ -223,6 +248,9 @@ class OcorrenciaController extends SingeApiController
                         'tipo_ocorrencia' => $possivelDuplicado->tipoOcorrencia?->nome,
                         'distancia_km' => $candidata['distancia_km'],
                         'criterio' => $candidata['criterio'],
+
+                        // Resultado da IA, quando disponível.
+                        'analise_semantica' => $analises[$possivelDuplicado->id] ?? null,
                     ];
                 })
                 ->all();
@@ -232,14 +260,14 @@ class OcorrenciaController extends SingeApiController
                 'Não foi possível detectar possíveis duplicados da ocorrência.',
                 [
                     'ocorrencia_id' => $ocorrencia->id,
-                    'erro' => $e->getMessage(),
+                    'erro' => $e::class,
                 ],
             );
 
             return [];
         }
     }
-
+    
     /** @return array<string, mixed> */
     private function resumo(Ocorrencia $ocorrencia): array
     {
