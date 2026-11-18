@@ -242,16 +242,13 @@ it('records operator validation actor and timestamp and requires reason for nega
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['utilizador_id', 'data_validacao']);
 
-   $response = $this->actingAs($operator, 'sanctum')
+    $this->actingAs($operator, 'sanctum')
         ->postJson('/api/validacoes/ocorrencias', [
             'ocorrencia_id' => $occurrence->id,
             'estado' => 'REJEITADA',
             'motivo' => 'Registo duplicado.',
-        ]);
-
-    $response->dump();
-
-    $response->assertCreated()
+        ])
+        ->assertCreated()
         ->assertJsonPath('data.utilizador_id', $operator->id)
         ->assertJsonPath('data.estado', 'REJEITADA');
 
@@ -283,22 +280,19 @@ it('allows an operator to mark an occurrence as duplicate and link its original'
     );
 
     // 1. O Operador regista a ocorrência como duplicada.
-   $response = $this->actingAs($operator, 'sanctum')
+    $response = $this->actingAs($operator, 'sanctum')
         ->postJson('/api/validacoes/ocorrencias', [
             'ocorrencia_id' => $duplicate->id,
             'ocorrencia_original_id' => $original->id,
             'estado' => 'DUPLICADA',
             'observacoes' => 'Os dois relatos correspondem ao mesmo incidente.',
-        ]);
-
-    $response->dump();
-
-    $response->assertCreated()
+        ])
+        ->assertCreated()
         ->assertJsonPath('data.ocorrencia_id', $duplicate->id)
         ->assertJsonPath('data.ocorrencia_original_id', $original->id)
         ->assertJsonPath('data.utilizador_id', $operator->id)
         ->assertJsonPath('data.estado', 'DUPLICADA');
-        
+
     // 2. Confirmar que os dados foram guardados correctamente.
     $validation = ValidacaoOcorrencia::query()
         ->where('ocorrencia_id', $duplicate->id)
