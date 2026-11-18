@@ -15,6 +15,9 @@ use App\Services\Ocorrencias\OcorrenciaService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Services\Ocorrencias\DeteccaoDuplicadosService;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class OcorrenciaController extends SingeApiController
 {
@@ -30,7 +33,7 @@ class OcorrenciaController extends SingeApiController
             );
 
             return [
-                'items' => $paginator->getCollection()
+                'items' => collect($paginator->items())
                     ->map(fn (Ocorrencia $ocorrencia): array => $this->resumoOperacional($ocorrencia))
                     ->all(),
                 'pagination' => [
@@ -65,7 +68,7 @@ class OcorrenciaController extends SingeApiController
             );
 
             return [
-                'items' => $paginator->getCollection()
+                'items' => collect($paginator->items())
                     ->map(fn (Ocorrencia $ocorrencia): array => $this->resumo($ocorrencia))
                     ->all(),
                 'pagination' => [
@@ -103,12 +106,28 @@ class OcorrenciaController extends SingeApiController
     public function storeForOperator(
         StoreOperatorOcorrenciaRequest $request,
         OcorrenciaService $service,
+        DeteccaoDuplicadosService $detector,
     ): JsonResponse {
         return $this->execute(
-            fn (): array => $this->detalhes(
-                $service->criar($request->validated(), $this->authenticatedUser($request)),
-                true,
-            ),
+            function () use ($request, $service, $detector): array {
+                // 1. Registar a ocorrência normalmente.
+                $ocorrencia = $service->criar(
+                    $request->validated(),
+                    $this->authenticatedUser($request),
+                );
+
+                // 2. Preparar os detalhes habituais.
+                $details = $this->detalhes($ocorrencia, true);
+
+                // 3. Procurar possíveis duplicados.
+                // Esta operação não pode impedir o registo.
+                $details['possiveis_duplicados'] = $this->buscarDuplicados(
+                    $ocorrencia,
+                    $detector,
+                );
+
+                return $details;
+            },
             'Ocorrência institucional registada com sucesso e aguarda validação.',
             201,
         );
@@ -175,6 +194,50 @@ class OcorrenciaController extends SingeApiController
             ),
             'Estado da ocorrência actualizado com sucesso.',
         );
+    }
+
+    /**
+     * Procura possíveis ocorrências duplicadas sem comprometer o registo.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buscarDuplicados(
+        Ocorrencia $ocorrencia,
+        DeteccaoDuplicadosService $detector,
+    ): array {
+        try {
+            $candidatas = $detector->buscarCandidatas($ocorrencia);
+
+            return collect($candidatas)
+                ->map(function (array $candidata): array {
+                    /** @var Ocorrencia $possivelDuplicado */
+                    $possivelDuplicado = $candidata['ocorrencia'];
+
+                    return [
+                        ...$this->attributes($possivelDuplicado, [
+                            'id',
+                            'titulo',
+                            'data_ocorrencia',
+                            'estado',
+                        ]),
+                        'tipo_ocorrencia' => $possivelDuplicado->tipoOcorrencia?->nome,
+                        'distancia_km' => $candidata['distancia_km'],
+                        'criterio' => $candidata['criterio'],
+                    ];
+                })
+                ->all();
+
+        } catch (Throwable $e) {
+            Log::warning(
+                'Não foi possível detectar possíveis duplicados da ocorrência.',
+                [
+                    'ocorrencia_id' => $ocorrencia->id,
+                    'erro' => $e->getMessage(),
+                ],
+            );
+
+            return [];
+        }
     }
 
     /** @return array<string, mixed> */
