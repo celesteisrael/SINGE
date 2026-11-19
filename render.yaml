@@ -19,19 +19,21 @@ services:
       - key: DB_CONNECTION
         value: mysql
       - key: DB_HOST
-        sync: false # Preencher com o Host do TiDB Cloud
+        value: gateway01.ap-northeast-1.prod.aws.tidbcloud.com
       - key: DB_PORT
         value: "4000"
       - key: DB_DATABASE
-        sync: false # Preencher com o nome do banco no TiDB Cloud
+        value: singe_db
       - key: DB_USERNAME
-        sync: false # Preencher com o User do TiDB Cloud
+        value: 2TEbWH1qjlLqBxg.root
       - key: DB_PASSWORD
-        sync: false # Preencher com a Senha do TiDB Cloud
+        sync: false
+      - key: MYSQL_ATTR_SSL_CA
+        value: /etc/ssl/certs/ca-certificates.crt
       - key: RUN_MIGRATIONS
-        value: "true"
+        value: "false"
       - key: RUN_SEEDERS
-        value: "true"
+        value: "false"
 
   # Frontend React (Vite SPA)
   - type: static
