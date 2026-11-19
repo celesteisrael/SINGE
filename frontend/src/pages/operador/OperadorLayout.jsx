@@ -6,7 +6,8 @@ const NAVIGATION = [
   { id: 'ocorrencias', label: 'Ocorrências', icon: 'FileText' },
   { id: 'registar', label: 'Registar ocorrência', icon: 'PlusCircle' },
   { id: 'identidade', label: 'Verificar identidade', icon: 'ShieldCheck' },
-  { id: 'avisos', label: 'Notificações e alertas', icon: 'Bell' },
+  { id: 'avisos', label: 'Alertas públicos e notificações', icon: 'Bell' },
+  { id: 'perfil', label: 'Meu perfil', icon: 'User' },
 ];
 
 export function OperadorLayout({ user, page, setPage, onLogout, children }) {

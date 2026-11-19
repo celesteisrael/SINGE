@@ -25,12 +25,27 @@ class StoreValidacaoOcorrenciaRequest extends SingeFormRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
-        $estadosPermitidos = $this->userHasAnyProfile(['Operador'])
-            ? ['VALIDADA', 'NAO_CONFIRMADA', 'REJEITADA']
+       $estadosPermitidos = $this->userHasAnyProfile(['Operador'])
+            ? ['VALIDADA', 'NAO_CONFIRMADA', 'REJEITADA', 'DUPLICADA']
             : self::ESTADOS;
 
         return [
-            'ocorrencia_id' => ['required', 'integer', 'exists:ocorrencias,id'],
+
+            'ocorrencia_id' => [
+                'required',
+                'integer',
+                'exists:ocorrencias,id',
+            ],
+
+            'ocorrencia_original_id' => [
+                'required_if:estado,DUPLICADA',
+                'nullable',
+                'integer',
+                'exists:ocorrencias,id',
+                'different:ocorrencia_id',
+                'prohibited_unless:estado,DUPLICADA',
+            ],
+            
             'estado' => ['required', Rule::in($estadosPermitidos)],
             'observacoes' => ['nullable', 'string'],
             'motivo' => [

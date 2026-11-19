@@ -18,6 +18,16 @@ class EquipaService
 {
     private const PERFIS_GESTAO = ['Administrador', 'Coordenador'];
 
+    /** @param array{latitude: float|null, longitude: float|null} $coordenadas */
+    public function atualizarLocalizacao(Equipa $equipa, array $coordenadas, User $utilizador): Equipa
+    {
+        $this->autorizarGestao($utilizador);
+        $equipa->latitude = $coordenadas['latitude'];
+        $equipa->longitude = $coordenadas['longitude'];
+        $equipa->save();
+        return $equipa->fresh();
+    }
+
     private const ESTADOS_ACTIVOS = [
         EstadoMissao::ATRIBUIDA->value,
         EstadoMissao::EM_DESLOCACAO->value,

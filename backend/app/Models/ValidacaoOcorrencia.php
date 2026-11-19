@@ -11,6 +11,7 @@ class ValidacaoOcorrencia extends Model
 
     protected $fillable = [
         'ocorrencia_id',
+        'ocorrencia_original_id',
         'utilizador_id',
         'estado',
         'observacoes',
@@ -25,15 +26,36 @@ class ValidacaoOcorrencia extends Model
         ];
     }
 
-    /** @return BelongsTo<Ocorrencia, $this> */
+    /**
+     * Ocorrência que está a ser validada.
+     */
     public function ocorrencia(): BelongsTo
     {
-        return $this->belongsTo(Ocorrencia::class, 'ocorrencia_id');
+        return $this->belongsTo(
+            Ocorrencia::class,
+            'ocorrencia_id'
+        );
     }
 
-    /** @return BelongsTo<User, $this> */
+    /**
+     * Ocorrência considerada original.
+     */
+    public function ocorrenciaOriginal(): BelongsTo
+    {
+        return $this->belongsTo(
+            Ocorrencia::class,
+            'ocorrencia_original_id'
+        );
+    }
+
+    /**
+     * Utilizador que realizou a validação.
+     */
     public function utilizador(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'utilizador_id');
+        return $this->belongsTo(
+            User::class,
+            'utilizador_id'
+        );
     }
 }

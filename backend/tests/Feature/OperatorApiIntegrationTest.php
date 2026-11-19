@@ -16,6 +16,7 @@ use App\Services\Localizacoes\LocalizacaoService;
 use App\Services\Ocorrencias\OcorrenciaService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 
 function operatorApiUser(string $profile): User
 {
@@ -168,7 +169,8 @@ it('allows an operator to register an institutional occurrence under their own i
 
     $this->actingAs($operator, 'sanctum')
         ->postJson('/api/avaliacoes-prioridade', [])
-        ->assertForbidden();
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['ocorrencia_id', 'factores']);
 });
 
 it('returns operator detail with minimal communicator, evidence, validation and history actors', function () {
@@ -261,7 +263,68 @@ it('records operator validation actor and timestamp and requires reason for nega
             'estado' => 'DUPLICADA',
         ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors('estado');
+        ->assertJsonValidationErrors('ocorrencia_original_id');
+});
+
+it('allows an operator to mark an occurrence as duplicate and link its original', function () {
+    $operator = operatorApiUser('Operador');
+    $citizen = operatorApiUser('Cidadão');
+
+    [$duplicate] = operatorApiOccurrence(
+        $citizen,
+        'Relato duplicado'
+    );
+
+    [$original] = operatorApiOccurrence(
+        $citizen,
+        'Ocorrência original'
+    );
+
+    // 1. O Operador regista a ocorrência como duplicada.
+    $response = $this->actingAs($operator, 'sanctum')
+        ->postJson('/api/validacoes/ocorrencias', [
+            'ocorrencia_id' => $duplicate->id,
+            'ocorrencia_original_id' => $original->id,
+            'estado' => 'DUPLICADA',
+            'observacoes' => 'Os dois relatos correspondem ao mesmo incidente.',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.ocorrencia_id', $duplicate->id)
+        ->assertJsonPath('data.ocorrencia_original_id', $original->id)
+        ->assertJsonPath('data.utilizador_id', $operator->id)
+        ->assertJsonPath('data.estado', 'DUPLICADA');
+
+    // 2. Confirmar que os dados foram guardados correctamente.
+    $validation = ValidacaoOcorrencia::query()
+        ->where('ocorrencia_id', $duplicate->id)
+        ->sole();
+
+    expect($validation->ocorrencia_original_id)->toBe($original->id)
+        ->and($validation->utilizador_id)->toBe($operator->id)
+        ->and($validation->estado)->toBe('DUPLICADA')
+        ->and($validation->data_validacao)->not->toBeNull();
+
+    // 3. Uma ocorrência não pode ser duplicada de si própria.
+    $this->actingAs($operator, 'sanctum')
+        ->postJson('/api/validacoes/ocorrencias', [
+            'ocorrencia_id' => $duplicate->id,
+            'ocorrencia_original_id' => $duplicate->id,
+            'estado' => 'DUPLICADA',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('ocorrencia_original_id');
+
+    // 4. A ocorrência original tem de existir.
+    $idInexistente = ((int) Ocorrencia::query()->max('id')) + 100;
+
+    $this->actingAs($operator, 'sanctum')
+        ->postJson('/api/validacoes/ocorrencias', [
+            'ocorrencia_id' => $duplicate->id,
+            'ocorrencia_original_id' => $idInexistente,
+            'estado' => 'DUPLICADA',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('ocorrencia_original_id');
 });
 
 it('denies operators generic occurrence changes, priority evaluation, missions and geography management', function () {
@@ -275,9 +338,10 @@ it('denies operators generic occurrence changes, priority evaluation, missions a
     $this->actingAs($operator, 'sanctum')
         ->patchJson('/api/ocorrencias/'.$occurrence->id.'/estado', ['estado' => 'resolvida'])
         ->assertForbidden();
-    $this->actingAs($operator, 'sanctum')
+   $this->actingAs($operator, 'sanctum')
         ->postJson('/api/avaliacoes-prioridade', [])
-        ->assertForbidden();
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['ocorrencia_id', 'factores']);
     $this->actingAs($operator, 'sanctum')
         ->postJson('/api/missoes', [])
         ->assertForbidden();
@@ -307,4 +371,130 @@ it('denies operators generic occurrence changes, priority evaluation, missions a
         ))->toThrow(AuthorizationException::class)
         ->and(fn () => (new LocalizacaoService)->criar([], $operator))
         ->toThrow(AuthorizationException::class);
+});
+
+
+it('returns deterministic and semantic duplicate suggestions when an operator registers an occurrence', function () {
+    config([
+        'services.openai.enabled' => true,
+        'services.openai.api_key' => 'test-api-key',
+        'services.openai.base_url' => 'https://api.openai.test/v1',
+        'services.openai.model' => 'gpt-6.1-terra',
+    ]);
+
+    $operator = operatorApiUser('Operador');
+    $citizen = operatorApiUser('Cidadão');
+
+    [$candidate, $type] = operatorApiOccurrence(
+        $citizen,
+        'Cheia no bairro central'
+    );
+
+    $candidate->forceFill([
+        'latitude' => -25.9655,
+        'longitude' => 32.5832,
+        'data_ocorrencia' => now()->subMinutes(6),
+    ])->save();
+
+    Http::fake([
+        '*' => Http::response([
+            'choices' => [
+                [
+                    'message' => [
+                        'content' => json_encode([
+                            'resultados' => [
+                                [
+                                    'id' => $candidate->id,
+                                    'semelhanca' => 95,
+                                    'possivel_duplicado' => true,
+                                    'justificacao' => 'Os relatos descrevem aparentemente a mesma cheia.',
+                                ],
+                            ],
+                        ], JSON_UNESCAPED_UNICODE),
+                    ],
+                ],
+            ],
+        ], 200),
+    ]);
+
+    $response = $this->actingAs($operator, 'sanctum')
+        ->postJson('/api/operador/ocorrencias', [
+            'titulo' => 'Cheia no bairro central',
+            'descricao' => 'Subida rápida do nível da água no bairro central.',
+            'localizacao' => 'Bairro Central',
+            'latitude' => -25.9656,
+            'longitude' => 32.5832,
+            'tipo_ocorrencia_id' => $type->id,
+            'origem' => 'telefone',
+            'comunicante_nome' => 'Comunicante de teste',
+            'comunicante_contacto' => '+258 840000000',
+            'data_ocorrencia' => now()->subMinutes(5)->toDateTimeString(),
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.possiveis_duplicados.0.id', $candidate->id)
+        ->assertJsonPath(
+            'data.possiveis_duplicados.0.analise_semantica.possivel_duplicado',
+            true
+        )
+        ->assertJsonPath(
+            'data.possiveis_duplicados.0.analise_semantica.semelhanca',
+            95
+        );
+
+    $newOccurrenceId = $response->json('data.id');
+
+    expect(Ocorrencia::query()->findOrFail($newOccurrenceId)->utilizador_id)
+        ->toBe($operator->id)
+        ->and(ValidacaoOcorrencia::query()->count())->toBe(0);
+});
+
+it('registers an operator occurrence even when semantic duplicate analysis fails', function () {
+    config([
+        'services.openai.enabled' => true,
+        'services.openai.api_key' => 'test-api-key',
+        'services.openai.base_url' => 'https://api.openai.test/v1',
+        'services.openai.model' => 'gpt-6.1-terra',
+    ]);
+
+    $operator = operatorApiUser('Operador');
+    $citizen = operatorApiUser('Cidadão');
+
+    [$candidate, $type] = operatorApiOccurrence(
+        $citizen,
+        'Incêndio numa residência'
+    );
+
+    $candidate->forceFill([
+        'latitude' => -25.9655,
+        'longitude' => 32.5832,
+        'data_ocorrencia' => now()->subMinutes(6),
+    ])->save();
+
+    Http::fake([
+        '*' => Http::response([
+            'error' => 'OpenAI indisponível.',
+        ], 500),
+    ]);
+
+    $response = $this->actingAs($operator, 'sanctum')
+        ->postJson('/api/operador/ocorrencias', [
+            'titulo' => 'Incêndio numa residência',
+            'descricao' => 'Fogo numa residência no bairro central.',
+            'localizacao' => 'Bairro Central',
+            'latitude' => -25.9656,
+            'longitude' => 32.5832,
+            'tipo_ocorrencia_id' => $type->id,
+            'origem' => 'telefone',
+            'data_ocorrencia' => now()->subMinutes(5)->toDateTimeString(),
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.possiveis_duplicados.0.id', $candidate->id)
+        ->assertJsonPath(
+            'data.possiveis_duplicados.0.analise_semantica',
+            null
+        );
+
+    expect(Ocorrencia::query()->findOrFail($response->json('data.id')))
+        ->not->toBeNull()
+        ->and(ValidacaoOcorrencia::query()->count())->toBe(0);
 });

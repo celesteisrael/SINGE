@@ -309,11 +309,10 @@ it('records a priority evaluation and the applied factor weights through the API
     Prioridade::query()->create(['nome' => 'Média', 'descricao' => 'Programada', 'nivel' => 3]);
 
     $factorNames = [
-        ['nome' => 'Gravidade', 'peso' => 0.30],
-        ['nome' => 'Pessoas afectadas', 'peso' => 0.25],
-        ['nome' => 'Vulnerabilidade', 'peso' => 0.20],
-        ['nome' => 'Localização', 'peso' => 0.15],
-        ['nome' => 'Escassez de recursos', 'peso' => 0.10],
+        ['nome' => 'Gravidade', 'peso' => 0.35],
+        ['nome' => 'Pessoas afectadas', 'peso' => 0.29],
+        ['nome' => 'Vulnerabilidade', 'peso' => 0.24],
+        ['nome' => 'Escassez de recursos', 'peso' => 0.12],
     ];
     $factors = collect($factorNames)->map(
         fn (array $factor): FatorPrioridade => FatorPrioridade::query()->create([
@@ -332,10 +331,10 @@ it('records a priority evaluation and the applied factor weights through the API
         ])
         ->assertCreated()
         ->assertJsonPath('data.pontuacao_total', '5.00')
-        ->assertJsonCount(5, 'data.detalhes');
+        ->assertJsonCount(4, 'data.detalhes');
 
     $evaluation = AvaliacaoPrioridade::query()->findOrFail($response->json('data.id'));
-    expect($evaluation->detalhes)->toHaveCount(5)
+    expect($evaluation->detalhes)->toHaveCount(4)
         ->and(DetalheAvaliacao::query()->where('avaliacao_prioridade_id', $evaluation->id)->sum('peso_aplicado'))
         ->toBe(1.0)
         ->and($occurrence->refresh()->prioridade_id)->toBe($evaluation->prioridade_id);

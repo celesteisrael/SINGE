@@ -15,13 +15,14 @@ class UpdateOcorrenciaRequest extends SingeFormRequest
     public function rules(): array
     {
         $isManager = $this->userHasAnyProfile(self::PERFIS_GESTORES);
+        $isOperator = $this->userHasAnyProfile(['Operador']);
 
         return [
             'titulo' => ['sometimes', 'required', 'string', 'max:150'],
             'descricao' => ['sometimes', 'required', 'string'],
-            'localizacao' => ['sometimes', 'required', 'string', 'max:255'],
-            'localizacao_id' => ['sometimes', 'nullable', 'integer', 'exists:localizacoes,id'],
-            'tipo_ocorrencia_id' => ['sometimes', 'required', 'integer', 'exists:tipos_ocorrencia,id'],
+            'localizacao' => $isOperator ? ['prohibited'] : ['sometimes', 'required', 'string', 'max:255'],
+            'localizacao_id' => $isOperator ? ['prohibited'] : ['sometimes', 'nullable', 'integer', 'exists:localizacoes,id'],
+            'tipo_ocorrencia_id' => $isOperator ? ['prohibited'] : ['sometimes', 'required', 'integer', 'exists:tipos_ocorrencia,id'],
             'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
             'estado' => $isManager
@@ -40,7 +41,7 @@ class UpdateOcorrenciaRequest extends SingeFormRequest
             && $ocorrencia instanceof Ocorrencia
             && (
                 (int) $ocorrencia->utilizador_id === (int) $this->user()->getAuthIdentifier()
-                || $this->userHasAnyProfile(self::PERFIS_GESTORES)
+                || $this->userHasAnyProfile([...self::PERFIS_GESTORES, 'Operador'])
             );
     }
 

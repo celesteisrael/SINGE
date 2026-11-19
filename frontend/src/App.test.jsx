@@ -215,7 +215,7 @@ describe('protecção do painel do Cidadão', () => {
 
     expect(await screen.findByText('Painel do Operador')).toBeInTheDocument();
     expect(await screen.findByText('Ana Operadora')).toBeInTheDocument();
-    expect(screen.getByText('Pendentes de análise')).toBeInTheDocument();
+    expect(screen.getByText('Total de ocorrências')).toBeInTheDocument();
     expect(screen.queryByText('Registar Nova Ocorrência')).not.toBeInTheDocument();
     expect(screen.queryByText('Hoje, 08:35')).not.toBeInTheDocument();
 

@@ -15,9 +15,22 @@ use App\Services\Ocorrencias\OcorrenciaService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Services\Ocorrencias\DeteccaoDuplicadosService;
+use Illuminate\Support\Facades\Log;
+use Throwable;
+use App\Services\Ocorrencias\AnaliseSemanticaDuplicadosService;
+use App\Services\Ocorrencias\SugestaoComplementoDuplicadosService;
 
 class OcorrenciaController extends SingeApiController
 {
+    public function suggestDescription(Ocorrencia $ocorrencia, SugestaoComplementoDuplicadosService $service): JsonResponse
+    {
+        return $this->execute(
+            fn (): array => $service->sugerir($ocorrencia),
+            'Sugestões de complemento consultadas com sucesso.',
+        );
+    }
+
     public function indexForOperator(
         IndexOperadorOcorrenciasRequest $request,
         OcorrenciaService $service,
@@ -30,7 +43,7 @@ class OcorrenciaController extends SingeApiController
             );
 
             return [
-                'items' => $paginator->getCollection()
+                'items' => collect($paginator->items())
                     ->map(fn (Ocorrencia $ocorrencia): array => $this->resumoOperacional($ocorrencia))
                     ->all(),
                 'pagination' => [
@@ -65,7 +78,7 @@ class OcorrenciaController extends SingeApiController
             );
 
             return [
-                'items' => $paginator->getCollection()
+                'items' => collect($paginator->items())
                     ->map(fn (Ocorrencia $ocorrencia): array => $this->resumo($ocorrencia))
                     ->all(),
                 'pagination' => [
@@ -100,15 +113,38 @@ class OcorrenciaController extends SingeApiController
         );
     }
 
-    public function storeForOperator(
+   public function storeForOperator(
         StoreOperatorOcorrenciaRequest $request,
         OcorrenciaService $service,
+        DeteccaoDuplicadosService $detector,
+        AnaliseSemanticaDuplicadosService $analiseSemantica,
     ): JsonResponse {
         return $this->execute(
-            fn (): array => $this->detalhes(
-                $service->criar($request->validated(), $this->authenticatedUser($request)),
-                true,
-            ),
+            function () use (
+                $request,
+                $service,
+                $detector,
+                $analiseSemantica,
+            ): array {
+                // 1. Registar a ocorrência normalmente.
+                $ocorrencia = $service->criar(
+                    $request->validated(),
+                    $this->authenticatedUser($request),
+                );
+
+                // 2. Preparar os detalhes habituais.
+                $details = $this->detalhes($ocorrencia, true);
+
+                // 3. Procurar possíveis duplicados.
+                // A falha da detecção ou da IA não pode impedir o registo.
+                $details['possiveis_duplicados'] = $this->buscarDuplicados(
+                    $ocorrencia,
+                    $detector,
+                    $analiseSemantica,
+                );
+
+                return $details;
+            },
             'Ocorrência institucional registada com sucesso e aguarda validação.',
             201,
         );
@@ -177,6 +213,70 @@ class OcorrenciaController extends SingeApiController
         );
     }
 
+    /**
+     * Procura possíveis ocorrências duplicadas sem comprometer o registo.
+     *
+     * Primeiro utiliza a detecção determinística.
+     * Depois complementa os resultados com a análise semântica.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buscarDuplicados(
+        Ocorrencia $ocorrencia,
+        DeteccaoDuplicadosService $detector,
+        AnaliseSemanticaDuplicadosService $analiseSemantica,
+    ): array {
+        try {
+            // 1. Obter candidatos através das regras determinísticas.
+            $candidatas = $detector->buscarCandidatas($ocorrencia);
+
+            if ($candidatas === []) {
+                return [];
+            }
+
+            // 2. Analisar semanticamente os candidatos.
+            // Se a IA falhar, o serviço devolve uma lista vazia.
+            $analises = $analiseSemantica->analisar(
+                $ocorrencia,
+                $candidatas,
+            );
+
+            // 3. Combinar os resultados sem perder os candidatos originais.
+            return collect($candidatas)
+                ->map(function (array $candidata) use ($analises): array {
+                    /** @var Ocorrencia $possivelDuplicado */
+                    $possivelDuplicado = $candidata['ocorrencia'];
+
+                    return [
+                        ...$this->attributes($possivelDuplicado, [
+                            'id',
+                            'titulo',
+                            'data_ocorrencia',
+                            'estado',
+                        ]),
+                        'tipo_ocorrencia' => $possivelDuplicado->tipoOcorrencia?->nome,
+                        'distancia_km' => $candidata['distancia_km'],
+                        'criterio' => $candidata['criterio'],
+
+                        // Resultado da IA, quando disponível.
+                        'analise_semantica' => $analises[$possivelDuplicado->id] ?? null,
+                    ];
+                })
+                ->all();
+
+        } catch (Throwable $e) {
+            Log::warning(
+                'Não foi possível detectar possíveis duplicados da ocorrência.',
+                [
+                    'ocorrencia_id' => $ocorrencia->id,
+                    'erro' => $e::class,
+                ],
+            );
+
+            return [];
+        }
+    }
+    
     /** @return array<string, mixed> */
     private function resumo(Ocorrencia $ocorrencia): array
     {

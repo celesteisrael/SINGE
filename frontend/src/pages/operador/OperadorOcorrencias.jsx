@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Icon from '../../components/common/Icon';
-import { Card, StatusBadge, Pagination, EmptyState, inputCls } from '../../components/common/CommonComponents';
+import { Card, StatCard, StatusBadge, Pagination, EmptyState, inputCls } from '../../components/common/CommonComponents';
 
 const STATES = [
   ['registada', 'Registada'],
@@ -22,6 +22,7 @@ function formatDate(value) {
 
 export function OperadorOcorrencias({
   ocorrencias = [],
+  estatisticas = {},
   pagination,
   filters,
   types = [],
@@ -64,15 +65,16 @@ export function OperadorOcorrencias({
         </button>
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-3"><StatCard icon="FileText" label="Ocorrências registadas" value={estatisticas.total ?? pagination?.total ?? 0} tone="brand" /><StatCard icon="CheckCircle" label="Resolvidas" value={estatisticas.resolvidas ?? 0} tone="green" /><StatCard icon="XCircle" label="Canceladas" value={estatisticas.canceladas ?? 0} tone="red" /></div>
       <Card className="p-4">
         <form onSubmit={submitSearch} className="grid md:grid-cols-3 xl:grid-cols-4 gap-3">
           <div className="relative md:col-span-2">
             <Icon name="Search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted dark:text-dmuted pointer-events-none" />
             <input
               aria-label="Pesquisar ocorrências"
-              placeholder="Pesquisar por identificador, título, descrição ou localização"
+              placeholder="Pesquisar por título ou localização"
               value={query}
-              onChange={event => setQuery(event.target.value)}
+              onChange={event => { setQuery(event.target.value); onFiltersChange({ q: event.target.value, page: 1 }); }}
               className={`${inputCls} pl-9`}
             />
           </div>
@@ -94,27 +96,9 @@ export function OperadorOcorrencias({
             <option value="">Todos os tipos</option>
             {types.map(type => <option key={type.id} value={type.id}>{type.nome}</option>)}
           </select>
-          <input
-            aria-label="Filtrar por província"
-            placeholder="Província"
-            value={filters.provincia || ''}
-            onChange={event => setFilter('provincia', event.target.value)}
-            className={inputCls}
-          />
-          <input
-            aria-label="Filtrar por distrito"
-            placeholder="Distrito"
-            value={filters.distrito || ''}
-            onChange={event => setFilter('distrito', event.target.value)}
-            className={inputCls}
-          />
-          <input
-            aria-label="Filtrar por localização"
-            placeholder="Localização"
-            value={filters.localizacao || ''}
-            onChange={event => setFilter('localizacao', event.target.value)}
-            className={inputCls}
-          />
+
+
+
           <label className="text-xs text-muted dark:text-dmuted">
             Desde
             <input

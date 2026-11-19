@@ -48,7 +48,7 @@ class EquipaController extends SingeApiController
 
         return [
             ...$this->attributes($equipa, [
-                'id', 'nome', 'tipo_equipa_id', 'estado', 'descricao', 'created_at', 'updated_at',
+                'id', 'nome', 'tipo_equipa_id', 'estado', 'descricao', 'latitude', 'longitude', 'created_at', 'updated_at',
             ]),
             'tipo_equipa' => $equipa->tipoEquipa?->nome,
             'membros' => $equipa->utilizadores->map(fn ($user): array => [
@@ -76,9 +76,24 @@ class EquipaController extends SingeApiController
         return $this->execute(
             fn (): array => $this->attributes(
                 $service->atualizarDisponibilidade($equipa, $estado, $this->authenticatedUser($request)),
-                ['id', 'nome', 'tipo_equipa_id', 'estado', 'descricao', 'updated_at'],
+                ['id', 'nome', 'tipo_equipa_id', 'estado', 'descricao', 'latitude', 'longitude', 'updated_at'],
             ),
             'Disponibilidade da equipa actualizada com sucesso.',
+        );
+    }
+
+    public function updateLocation(Equipa $equipa, Request $request, EquipaService $service): JsonResponse
+    {
+        $dados = $request->validate([
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
+        ]);
+        return $this->execute(
+            fn (): array => $this->attributes($service->atualizarLocalizacao($equipa, [
+                'latitude' => isset($dados['latitude']) ? (float) $dados['latitude'] : null,
+                'longitude' => isset($dados['longitude']) ? (float) $dados['longitude'] : null,
+            ], $this->authenticatedUser($request)), ['id', 'latitude', 'longitude', 'updated_at']),
+            'Localização da equipa actualizada com sucesso.',
         );
     }
 }

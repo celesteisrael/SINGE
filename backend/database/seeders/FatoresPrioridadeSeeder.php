@@ -15,6 +15,7 @@ class FatoresPrioridadeSeeder extends Seeder
                 'Gravidade dos danos',
                 'População em risco',
                 'Urgência da intervenção',
+                'Localização',
             ])
             ->update([
                 'ativo' => false,
@@ -22,11 +23,10 @@ class FatoresPrioridadeSeeder extends Seeder
             ]);
 
         $fatores = [
-            ['nome' => 'Gravidade', 'descricao' => 'Severidade do evento e risco para a vida.', 'peso' => 0.30],
-            ['nome' => 'Pessoas afectadas', 'descricao' => 'Número estimado de pessoas em risco.', 'peso' => 0.25],
-            ['nome' => 'Vulnerabilidade', 'descricao' => 'Presença de pessoas vulneráveis e condições especiais.', 'peso' => 0.20],
-            ['nome' => 'Localização', 'descricao' => 'Acessibilidade e proximidade das equipas.', 'peso' => 0.15],
-            ['nome' => 'Escassez de recursos', 'descricao' => 'Disponibilidade dos recursos necessários para resposta.', 'peso' => 0.10],
+            ['nome' => 'Gravidade', 'descricao' => 'Severidade do evento e risco para a vida.', 'peso' => 0.35],
+            ['nome' => 'Pessoas afectadas', 'descricao' => 'Número estimado de pessoas em risco.', 'peso' => 0.29],
+            ['nome' => 'Vulnerabilidade', 'descricao' => 'Presença de pessoas vulneráveis e condições especiais.', 'peso' => 0.24],
+            ['nome' => 'Escassez de recursos', 'descricao' => 'Número total de equipas actualmente disponíveis como recursos operacionais.', 'peso' => 0.12],
         ];
 
         foreach ($fatores as $fator) {

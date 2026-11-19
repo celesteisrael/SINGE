@@ -9,20 +9,21 @@ class StoreAvaliacaoPrioridadeRequest extends SingeFormRequest
 {
     public function authorize(): bool
     {
-        if (! parent::authorize() || ! $this->userHasAnyProfile(['Administrador', 'Coordenador'])) {
+        if (! parent::authorize()
+            || ! $this->userHasAnyProfile(['Administrador', 'Coordenador', 'Operador'])) {
             return false;
         }
 
         return ! $this->boolean('risco_iminente_morte')
             || $this->userHasAnyProfile(['Administrador', 'Coordenador']);
     }
-
+    
     /** @return array<string, mixed> */
     public function rules(): array
     {
         return [
             'ocorrencia_id' => ['required', 'integer', 'exists:ocorrencias,id'],
-            'factores' => ['required', 'array', 'min:5', 'max:5'],
+            'factores' => ['required', 'array', 'min:4', 'max:4'],
             'factores.*' => ['required', 'array:fator_prioridade_id,pontuacao,observacao'],
             'factores.*.fator_prioridade_id' => [
                 'required',
@@ -48,8 +49,8 @@ class StoreAvaliacaoPrioridadeRequest extends SingeFormRequest
     {
         return [
             ...parent::messages(),
-            'factores.min' => 'A avaliação deve incluir os cinco factores oficiais.',
-            'factores.max' => 'A avaliação deve incluir os cinco factores oficiais.',
+            'factores.min' => 'A avaliação deve incluir os quatro factores oficiais.',
+            'factores.max' => 'A avaliação deve incluir os quatro factores oficiais.',
             'factores.*.fator_prioridade_id.distinct' => 'Não é permitido repetir factores na mesma avaliação.',
             'factores.*.fator_prioridade_id.exists' => 'O factor seleccionado não existe ou está inactivo.',
             'factores.*.pontuacao.between' => 'A pontuação de cada factor deve estar entre 0 e 10.',

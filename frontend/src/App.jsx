@@ -255,7 +255,7 @@ function MainApp() {
       onMarkNotificationAsRead={markNotificationAsRead}
     >
       {page === 'perfil' ? (
-        <CidadaoPerfil user={user} />
+        <CidadaoPerfil user={user} identityStatus={identityStatus} setPage={setPage} />
       ) : page === 'verificacao' ? (
         <CidadaoVerificacao onEligibilityChange={handleIdentityEligibility} />
       ) : page === 'notificacoes' ? (

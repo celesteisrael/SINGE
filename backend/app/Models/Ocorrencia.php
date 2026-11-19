@@ -114,4 +114,15 @@ class Ocorrencia extends Model
     {
         return $this->hasMany(Notificacao::class, 'ocorrencia_id');
     }
+
+    /**
+     * Validações em que esta ocorrência foi identificada como original.
+     */
+    public function validacoesComoOriginal(): HasMany
+    {
+        return $this->hasMany(
+            ValidacaoOcorrencia::class,
+            'ocorrencia_original_id'
+        );
+    }
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import Icon from '../../components/common/Icon';
 import { Card, StatCard, StatusBadge } from '../../components/common/CommonComponents';
 import { MozambiqueMap } from '../../components/map/MapComponents';
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const STATE_LABELS = {
   registada: 'Registada',
@@ -31,6 +31,8 @@ export function OperadorDashboard({
   onRefresh,
   onSelect,
   setPage,
+  notificationsTotal = 0,
+  alertsTotal = 0,
 }) {
   return (
     <div className="space-y-6">
@@ -55,21 +57,19 @@ export function OperadorDashboard({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <StatCard icon="FileText" label="Total de ocorrências" value={loading ? '…' : (estatisticas.total ?? 0)} tone="brand" />
-        <StatCard icon="Clock" label="Pendentes de análise" value={loading ? '…' : (estatisticas.pendentes_analise ?? 0)} tone="orange" />
-        <StatCard icon="CheckCircle" label="Validadas" value={loading ? '…' : (estatisticas.validadas ?? 0)} tone="green" />
-        <StatCard icon="AlertTriangle" label="Não confirmadas" value={loading ? '…' : (estatisticas.nao_confirmadas ?? 0)} tone="orange" />
-        <StatCard icon="XCircle" label="Rejeitadas" value={loading ? '…' : (estatisticas.rejeitadas ?? 0)} tone="red" />
-        <StatCard icon="ShieldCheck" label="Identidades por analisar" value={identidadeStats ? (identidadeStats.pendentes + identidadeStats.em_analise) : '…'} hint={identidadeStats ? `${identidadeStats.aprovadas} aprovadas · ${identidadeStats.rejeitadas} rejeitadas` : (identidadeStatsError || 'A carregar pedidos')} tone="brand" />
-        <StatCard icon="Copy" label="Duplicadas" value={loading ? '…' : (estatisticas.duplicadas ?? 0)} tone="brand" />
+        <StatCard icon="ShieldCheck" label="Identidades por analisar" value={identidadeStats ? (identidadeStats.pendentes + identidadeStats.em_analise) : '…'} tone="orange" />
+        <StatCard icon="Bell" label="Total de notificações" value={notificationsTotal} tone="brand" />
+        <StatCard icon="AlertTriangle" label="Total de alertas" value={alertsTotal} tone="red" />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="p-5"><h2 className="mb-3 font-semibold">Registos de ocorrências · últimos 14 dias</h2>{loading ? <p role="status" className="text-sm text-muted">A carregar…</p> : !(estatisticas.evolucao_14_dias || []).length ? <p className="text-sm text-muted">Sem registos neste período.</p> : <div className="h-56"><ResponsiveContainer width="100%" height="100%"><LineChart data={estatisticas.evolucao_14_dias}><CartesianGrid strokeDasharray="3 3" opacity={0.2} /><XAxis dataKey="dia" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} tick={{ fontSize: 10 }} /><Tooltip /><Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} /></LineChart></ResponsiveContainer></div>}</Card>
+
         <Card className="p-5"><h2 className="mb-3 font-semibold">Ocorrências por tipo</h2>{loading ? <p role="status" className="text-sm text-muted">A carregar…</p> : !(estatisticas.por_tipo || []).some(item => Number(item.total)) ? <p className="text-sm text-muted">Sem ocorrências por classificar.</p> : <div className="h-56"><ResponsiveContainer width="100%" height="100%"><BarChart data={estatisticas.por_tipo.filter(item => Number(item.total) > 0)}><CartesianGrid strokeDasharray="3 3" opacity={0.2} /><XAxis dataKey="nome" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="total" fill="#0f766e" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer></div>}</Card>
         <Card className="p-5"><h2 className="mb-3 font-semibold">Estado da validação mais recente</h2>{loading ? <p role="status" className="text-sm text-muted">A carregar…</p> : !Object.keys(estatisticas.por_estado_validacao || {}).length ? <p className="text-sm text-muted">Ainda não foram registadas validações.</p> : <div className="h-56"><ResponsiveContainer width="100%" height="100%"><BarChart data={Object.entries(estatisticas.por_estado_validacao).map(([estado, total]) => ({ estado: estado.replaceAll('_', ' '), total: Number(total) }))}><CartesianGrid strokeDasharray="3 3" opacity={0.2} /><XAxis dataKey="estado" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="total" fill="#ea580c" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer></div>}</Card>
-        <Card className="p-5"><h2 className="mb-3 font-semibold">Localização das ocorrências recentes</h2>{ocorrencias.some(item => item.latitude != null || item.localizacao_geografica?.latitude != null) ? <MozambiqueMap ocorrencias={ocorrencias} height={220} onSelectOccurrence={item => onSelect(item.id)} /> : <p className="mb-3 text-sm text-muted">As ocorrências recentes ainda não têm coordenadas verificadas.</p>}{(estatisticas.por_provincia || []).length > 0 && <div className="mt-3 h-40"><p className="mb-2 text-xs text-muted">Ocorrências por província</p><ResponsiveContainer width="100%" height="100%"><BarChart data={estatisticas.por_provincia}><XAxis dataKey="nome" tick={{ fontSize: 9 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="total" fill="#0f766e" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div>}</Card>
+        <Card className="p-5"><h2 className="mb-3 font-semibold">Localização das ocorrências</h2>{ocorrencias.some(item => item.latitude != null || item.localizacao_geografica?.latitude != null) ? <MozambiqueMap ocorrencias={ocorrencias} height={300} onSelectOccurrence={item => onSelect(item.id)} /> : <p className="mb-3 text-sm text-muted">As ocorrências recentes ainda não têm coordenadas verificadas.</p>}</Card>
+        <Card className="p-5"><h2 className="mb-3 font-semibold">Ocorrências por província</h2>{(estatisticas.por_provincia || []).length ? <div className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={estatisticas.por_provincia} margin={{ top: 8, right: 12, left: -12, bottom: 35 }}><CartesianGrid strokeDasharray="3 3" opacity={0.2} /><XAxis dataKey="nome" tick={{ fontSize: 10 }} angle={-20} textAnchor="end" interval={0} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="total" fill="#0f766e" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div> : <p className="text-sm text-muted">Sem ocorrências por província.</p>}</Card>
       </div>
 
       <Card>
