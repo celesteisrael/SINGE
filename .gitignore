@@ -14,6 +14,10 @@ build/
 .env.*
 !.env.example
 
+# SQLite
+*.sqlite
+*.sqlite-journal
+
 # Logs
 *.log
 npm-debug.log*

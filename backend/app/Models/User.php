@@ -19,6 +19,7 @@ class User extends Authenticatable
         'password',
         'perfil_id',
         'equipa_id',
+        'estado',
     ];
 
     protected $hidden = [

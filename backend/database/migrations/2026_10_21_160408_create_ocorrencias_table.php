@@ -13,37 +13,40 @@ return new class extends Migration
 {
     Schema::create('ocorrencias', function (Blueprint $table) {
         $table->id();
-
+        $table->string('ref', 50)->nullable()->unique();
         $table->string('titulo', 150);
         $table->text('descricao');
 
-        // Localização da ocorrência
-        $table->string('localizacao', 255);
+        // Localização detalhada
+        $table->string('provincia', 100)->nullable();
+        $table->string('distrito', 100)->nullable();
+        $table->string('localidade', 100)->nullable();
+        $table->string('localizacao', 255)->nullable();
         $table->decimal('latitude', 10, 7)->nullable();
         $table->decimal('longitude', 10, 7)->nullable();
 
-        // Classificação da ocorrência
+        // Dados operacionais
+        $table->string('tipo', 100)->nullable();
         $table->foreignId('tipo_ocorrencia_id')
+            ->nullable()
             ->constrained('tipos_ocorrencia')
-            ->restrictOnDelete();
+            ->nullOnDelete();
 
         $table->foreignId('prioridade_id')
+            ->nullable()
             ->constrained('prioridades')
-            ->restrictOnDelete();
+            ->nullOnDelete();
 
-        // Utilizador que registou a ocorrência
         $table->foreignId('utilizador_id')
+            ->nullable()
             ->constrained('users')
-            ->restrictOnDelete();
+            ->nullOnDelete();
 
-        // Estado atual da ocorrência
-        $table->enum('estado', [
-            'registada',
-            'em_avaliacao',
-            'em_atendimento',
-            'resolvida',
-            'cancelada',
-        ])->default('registada');
+        $table->string('estado', 50)->default('Por validar');
+        $table->string('fonte', 100)->nullable()->default('Cidadão');
+        $table->integer('afectados')->default(0);
+        $table->string('risco', 50)->nullable()->default('A avaliar');
+        $table->string('responsavel', 100)->nullable()->default('Operador');
 
         $table->timestamps();
     });

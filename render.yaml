@@ -1,0 +1,50 @@
+services:
+  # Backend Laravel (API)
+  - type: web
+    name: singe-backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    region: oregon
+    envVars:
+      - key: APP_NAME
+        value: SINGE
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        generateValue: true
+      - key: DB_CONNECTION
+        value: mysql
+      - key: DB_HOST
+        sync: false # Preencher com o Host do TiDB Cloud
+      - key: DB_PORT
+        value: "4000"
+      - key: DB_DATABASE
+        sync: false # Preencher com o nome do banco no TiDB Cloud
+      - key: DB_USERNAME
+        sync: false # Preencher com o User do TiDB Cloud
+      - key: DB_PASSWORD
+        sync: false # Preencher com a Senha do TiDB Cloud
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: RUN_SEEDERS
+        value: "true"
+
+  # Frontend React (Vite SPA)
+  - type: static
+    name: singe-frontend
+    rootDir: frontend
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_USE_MOCK
+        value: "false"
+      - key: VITE_API_URL
+        value: https://singe-backend.onrender.com/api
