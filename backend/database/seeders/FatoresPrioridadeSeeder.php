@@ -26,7 +26,7 @@ class FatoresPrioridadeSeeder extends Seeder
             ['nome' => 'Gravidade', 'descricao' => 'Severidade do evento e risco para a vida.', 'peso' => 0.35],
             ['nome' => 'Pessoas afectadas', 'descricao' => 'Número estimado de pessoas em risco.', 'peso' => 0.29],
             ['nome' => 'Vulnerabilidade', 'descricao' => 'Presença de pessoas vulneráveis e condições especiais.', 'peso' => 0.24],
-            ['nome' => 'Escassez de recursos', 'descricao' => 'Quantidade de equipas disponíveis com capacidade para responder à ocorrência.', 'peso' => 0.12],
+            ['nome' => 'Escassez de recursos', 'descricao' => 'Número total de equipas actualmente disponíveis como recursos operacionais.', 'peso' => 0.12],
         ];
 
         foreach ($fatores as $fator) {

@@ -372,6 +372,12 @@ export function CoordenadorWorkspace({ user, onLogout }) {
       <ErrorMessage error={error} />
       {selectedOccurrence ? <Card>
         <div className="mb-3 flex items-start justify-between"><div><h3 className="font-semibold">{selectedOccurrence.titulo}</h3><p className="text-sm text-muted">{selectedOccurrence.tipo} · {selectedOccurrence.localizacao}</p></div><button className="text-brand underline" onClick={() => setSelectedOccurrence(null)}>Fechar</button></div>
+        <div className="mb-3 rounded-lg bg-light p-3 dark:bg-dsidebar">
+          <h4 className="text-sm font-semibold">Descrição da ocorrência</h4>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-ink dark:text-dink">
+            {selectedOccurrence.descricao || 'Sem descrição registada.'}
+          </p>
+        </div>
         {selectedOccurrence.validacoes?.map(validation => <p key={validation.id} className="mb-2 text-sm">Validação {validation.estado} · {validation.responsavel} · {validation.motivo || validation.observacoes || '—'}</p>)}
         <form className="space-y-3" onSubmit={submitEvaluation}>
 

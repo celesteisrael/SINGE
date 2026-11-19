@@ -46,7 +46,9 @@ it('requests priority suggestions from the configured OpenAI model', function ()
         'estado' => EstadoOcorrencia::REGISTADA,
     ]);
     $teamType = TipoEquipa::query()->create(['nome' => 'Incêndio', 'ativo' => true]);
+    $otherTeamType = TipoEquipa::query()->create(['nome' => 'Resgate', 'ativo' => true]);
     Equipa::query()->create(['nome' => 'Equipa disponível', 'tipo_equipa_id' => $teamType->id, 'estado' => EstadoEquipa::DISPONIVEL]);
+    Equipa::query()->create(['nome' => 'Equipa disponível de outro tipo', 'tipo_equipa_id' => $otherTeamType->id, 'estado' => EstadoEquipa::DISPONIVEL]);
     Equipa::query()->create(['nome' => 'Equipa ocupada', 'tipo_equipa_id' => $teamType->id, 'estado' => EstadoEquipa::EM_MISSAO]);
 
     $factors = [
@@ -100,7 +102,7 @@ it('requests priority suggestions from the configured OpenAI model', function ()
             && $payload['max_completion_tokens'] === 6000
             && $payload['response_format'] === ['type' => 'json_object']
             && str_contains($payload['messages'][1]['content'], $occurrence->titulo)
-            && $data['equipas_disponiveis'] === [['tipo' => 'Incêndio', 'quantidade' => 1]]
+            && $data['equipas_disponiveis'] === 2
             && count($data['fatores']) === 4
             && ! collect($data['fatores'])->contains(fn (array $factor): bool => $factor['nome'] === 'Localização');
     });

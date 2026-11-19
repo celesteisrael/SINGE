@@ -4,8 +4,8 @@ namespace App\Services\Avaliacoes;
 
 use App\Models\FatorPrioridade;
 use App\Models\Ocorrencia;
-use App\Models\Equipa;
 use App\Enums\EstadoEquipa;
+use App\Models\Equipa;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -48,16 +48,8 @@ class SugestaoPrioridadeIAService
                 ->listarFatoresAtivos();
 
             $equipasDisponiveis = Equipa::query()
-                ->with('tipoEquipa')
                 ->where('estado', EstadoEquipa::DISPONIVEL->value)
-                ->get()
-                ->groupBy(fn (Equipa $equipa): string => (string) ($equipa->tipoEquipa?->nome ?? 'Sem tipo'))
-                ->map(fn ($equipas, string $tipo): array => [
-                    'tipo' => $tipo,
-                    'quantidade' => $equipas->count(),
-                ])
-                ->values()
-                ->all();
+                ->count();
 
             // Enviar apenas informação operacional.
             // Dados pessoais do comunicante e do utilizador são excluídos.
@@ -114,7 +106,7 @@ REGRAS OBRIGATÓRIAS:
 - Não deduzas que existem vítimas ou risco iminente de morte sem evidência explícita.
 - Não confundas a gravidade do tipo de ocorrência com a gravidade concreta desta ocorrência.
 - A localização não é um factor de prioridade e não deve influenciar nenhuma pontuação.
-- Para "escassez de recursos", considera apenas a quantidade de equipas actualmente disponíveis, apresentada por tipo. Usa apenas equipas do tipo compatível com a ocorrência; estados em missão ou indisponível não contam como recursos disponíveis. Se não houver tipo compatível disponível, considera a escassez elevada. Não assumes recursos além das equipas indicadas.
+- Para "escassez de recursos", considera o total global de equipas no estado disponível recebido nos dados. Um total menor indica maior escassez e um total maior indica menor escassez. Não filtres por tipo de equipa nem inventes um número de equipas necessárias; estados em missão ou indisponíveis não estão incluídos no total disponível.
 - Para "vulnerabilidade", avalia se os factos descritos podem evoluir para feridos ou mortes com o passar do tempo; distingue risco plausível de vítimas já confirmadas e explica a incerteza.
 - Para cada factor, indica se existem dados suficientes.
 - Se não existirem dados suficientes, coloca pontuacao como null e explica o que falta.

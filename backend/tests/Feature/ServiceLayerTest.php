@@ -126,12 +126,13 @@ it('calcula a pontuação oficial com os quatro factores e classifica os limites
         ->and($service->determinarPrioridade(7.50)->is($priorities[0]))->toBeTrue();
 });
 
-it('configura os cinco pesos oficiais e desactiva os factores legados incompatíveis', function () {
+it('configura os quatro pesos oficiais e desactiva os factores legados incompatíveis', function () {
     foreach ([
         ['Número de vítimas', 30],
         ['Gravidade dos danos', 25],
         ['População em risco', 25],
         ['Urgência da intervenção', 20],
+        ['Localização', 15],
     ] as [$nome, $peso]) {
         FatorPrioridade::query()->create(['nome' => $nome, 'peso' => $peso, 'ativo' => true]);
     }
@@ -146,7 +147,9 @@ it('configura os cinco pesos oficiais e desactiva os factores legados incompatí
         'Vulnerabilidade' => 0.24,
         'Escassez de recursos' => 0.12,
     ])
-        ->and(FatorPrioridade::query()->where('ativo', false)->count())->toBe(4);
+        ->and(FatorPrioridade::query()->where('ativo', false)->count())->toBe(5)
+        ->and(FatorPrioridade::query()->where('nome', 'Escassez de recursos')->value('descricao'))
+        ->toBe('Número total de equipas actualmente disponíveis como recursos operacionais.');
 });
 
 it('rejeita factores em falta, duplicados, inactivos e desconhecidos', function () {
