@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\API\AuthController;
-use App\Http\Controllers\API\PerfilController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\PerfilController;
 use App\Http\Controllers\Admin\UtilizadorAdminController;
 use App\Http\Controllers\Alertas\AlertaPublicoController;
 use App\Http\Controllers\Avaliacoes\AvaliacaoPrioridadeController;
