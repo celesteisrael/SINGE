@@ -16,6 +16,32 @@ use App\Http\Controllers\Notificacoes\NotificacaoController;
 use App\Http\Controllers\Ocorrencias\OcorrenciaController;
 use App\Http\Controllers\Validacoes\ValidacaoOcorrenciaController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+
+Route::get('/health', function () {
+    $dbStatus = 'unknown';
+    $dbError = null;
+    try {
+        DB::connection()->getPdo();
+        $dbStatus = 'connected';
+    } catch (\Throwable $e) {
+        $dbStatus = 'error';
+        $dbError = $e->getMessage();
+    }
+
+    return response()->json([
+        'status' => 'ok',
+        'php_version' => PHP_VERSION,
+        'app_env' => config('app.env'),
+        'database' => [
+            'status' => $dbStatus,
+            'driver' => config('database.default'),
+            'host' => config('database.connections.mysql.host'),
+            'user' => config('database.connections.mysql.username'),
+            'error' => $dbError,
+        ],
+    ]);
+});
 
 Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
 Route::post('/login', [AuthController::class, 'login'])->name('auth.login');
