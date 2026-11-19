@@ -49,13 +49,17 @@ function singeSemanticaCriarOcorrencia(
     ], $alteracoes));
 }
 
-function singeSemanticaRespostaOllama(array $resultados): array
+function singeSemanticaRespostaOpenAI(array $resultados): array
 {
     return [
-        'message' => [
-            'content' => json_encode([
-                'resultados' => $resultados,
-            ], JSON_UNESCAPED_UNICODE),
+        'choices' => [
+            [
+                'message' => [
+                    'content' => json_encode([
+                        'resultados' => $resultados,
+                    ], JSON_UNESCAPED_UNICODE),
+                ],
+            ],
         ],
     ];
 }
@@ -71,18 +75,21 @@ function singeSemanticaCandidata(Ocorrencia $ocorrencia): array
 
 beforeEach(function () {
     config([
-        'services.ollama.enabled' => true,
-        'services.ollama.base_url' => 'http://localhost:11434',
-        'services.ollama.model' => 'qwen3:1.7b',
-        'services.ollama.timeout' => 30,
-        'services.ollama.connect_timeout' => 5,
+        'services.openai.enabled' => true,
+        'services.openai.api_key' => 'test-api-key',
+        'services.openai.base_url' => 'https://api.openai.test/v1',
+        'services.openai.model' => 'gpt-6.1-terra',
+        'services.openai.reasoning_effort' => 'none',
+        'services.openai.max_output_tokens' => 6000,
+        'services.openai.timeout' => 30,
+        'services.openai.connect_timeout' => 5,
     ]);
 });
 
 it('identifica uma possivel ocorrencia duplicada', function () {
     Http::fake([
         '*' => Http::response(
-            singeSemanticaRespostaOllama([
+            singeSemanticaRespostaOpenAI([
                 [
                     'id' => 2,
                     'semelhanca' => 90,
@@ -102,7 +109,7 @@ it('identifica uma possivel ocorrencia duplicada', function () {
     // O resultado usa o ID real da candidata.
     Http::fake([
         '*' => Http::response(
-            singeSemanticaRespostaOllama([
+            singeSemanticaRespostaOpenAI([
                 [
                     'id' => $candidata->id,
                     'semelhanca' => 90,
@@ -139,18 +146,22 @@ it('identifica quando duas ocorrencias nao sao duplicadas', function () {
     ]);
 
     Http::fake([
-        'localhost:11434/api/chat' => Http::response([
-            'message' => [
-                'content' => json_encode([
-                    'resultados' => [
-                        [
-                            'id' => (int) $candidata->id,
-                            'semelhanca' => 35,
-                            'possivel_duplicado' => false,
-                            'justificacao' => 'Os relatos descrevem acontecimentos diferentes.',
-                        ],
+        'api.openai.test/v1/chat/completions' => Http::response([
+            'choices' => [
+                [
+                    'message' => [
+                        'content' => json_encode([
+                            'resultados' => [
+                                [
+                                    'id' => (int) $candidata->id,
+                                    'semelhanca' => 35,
+                                    'possivel_duplicado' => false,
+                                    'justificacao' => 'Os relatos descrevem acontecimentos diferentes.',
+                                ],
+                            ],
+                        ], JSON_UNESCAPED_UNICODE),
                     ],
-                ], JSON_UNESCAPED_UNICODE),
+                ],
             ],
         ], 200),
     ]);
@@ -166,11 +177,15 @@ it('identifica quando duas ocorrencias nao sao duplicadas', function () {
 });
 
 
-it('ignora uma resposta JSON invalida do Ollama', function () {
+it('ignora uma resposta JSON invalida da OpenAI', function () {
     Http::fake([
         '*' => Http::response([
-            'message' => [
-                'content' => 'Isto nao e um JSON valido.',
+            'choices' => [
+                [
+                    'message' => [
+                        'content' => 'Isto nao e um JSON valido.',
+                    ],
+                ],
             ],
         ], 200),
     ]);
@@ -191,7 +206,7 @@ it('ignora uma resposta JSON invalida do Ollama', function () {
 it('ignora respostas com dados fora do formato esperado', function () {
     Http::fake([
         '*' => Http::response(
-            singeSemanticaRespostaOllama([
+            singeSemanticaRespostaOpenAI([
                 [
                     'id' => 999999,
                     'semelhanca' => 95,
@@ -228,10 +243,10 @@ it('ignora respostas com dados fora do formato esperado', function () {
     expect($resultado)->toBeEmpty();
 });
 
-it('nao impede o funcionamento quando o Ollama devolve erro HTTP', function () {
+it('nao impede o funcionamento quando a OpenAI devolve erro HTTP', function () {
     Http::fake([
         '*' => Http::response([
-            'error' => 'Ollama indisponivel.',
+            'error' => 'OpenAI indisponivel.',
         ], 500),
     ]);
 
@@ -248,8 +263,8 @@ it('nao impede o funcionamento quando o Ollama devolve erro HTTP', function () {
     expect($resultado)->toBeEmpty();
 });
 
-it('nao faz chamadas ao Ollama quando a analise esta desactivada', function () {
-    config(['services.ollama.enabled' => false]);
+it('nao faz chamadas a OpenAI quando a analise esta desactivada', function () {
+    config(['services.openai.enabled' => false]);
 
     Http::fake();
 
@@ -268,10 +283,10 @@ it('nao faz chamadas ao Ollama quando a analise esta desactivada', function () {
     Http::assertNothingSent();
 });
 
-it('nao envia dados pessoais dos comunicantes ao Ollama', function () {
+it('nao envia dados pessoais dos comunicantes a OpenAI', function () {
     Http::fake([
         '*' => Http::response(
-            singeSemanticaRespostaOllama([]),
+            singeSemanticaRespostaOpenAI([]),
             200,
         ),
     ]);
@@ -298,21 +313,26 @@ it('nao envia dados pessoais dos comunicantes ao Ollama', function () {
     );
 
     Http::assertSent(function ($request) {
-        $dados = $request->data();
+        $payload = $request->data();
+        $conteudo = $payload['messages'][1]['content'] ?? '';
 
-        $conteudo = $dados['messages'][1]['content'] ?? '';
-
-        return ! str_contains($conteudo, 'Nome Confidencial Principal')
+        return $request->url() === 'https://api.openai.test/v1/chat/completions'
+            && $request->hasHeader('Authorization', 'Bearer test-api-key')
+            && $payload['model'] === 'gpt-6.1-terra'
+            && $payload['reasoning_effort'] === 'none'
+            && $payload['max_completion_tokens'] === 6000
+            && $payload['response_format'] === ['type' => 'json_object']
+            && ! str_contains($conteudo, 'Nome Confidencial Principal')
             && ! str_contains($conteudo, 'Nome Confidencial Candidato')
             && ! str_contains($conteudo, '841234567')
             && ! str_contains($conteudo, '849876543');
     });
 });
 
-it('envia no maximo dez candidatas ao Ollama', function () {
+it('envia no maximo dez candidatas a OpenAI', function () {
     Http::fake([
         '*' => Http::response(
-            singeSemanticaRespostaOllama([]),
+            singeSemanticaRespostaOpenAI([]),
             200,
         ),
     ]);
@@ -348,7 +368,7 @@ it('envia no maximo dez candidatas ao Ollama', function () {
 it('nao altera estados nem cria validacoes durante a analise semantica', function () {
     Http::fake([
         '*' => Http::response(
-            singeSemanticaRespostaOllama([
+            singeSemanticaRespostaOpenAI([
                 [
                     'id' => 2,
                     'semelhanca' => 95,
@@ -367,7 +387,7 @@ it('nao altera estados nem cria validacoes durante a analise semantica', functio
 
     Http::fake([
         '*' => Http::response(
-            singeSemanticaRespostaOllama([
+            singeSemanticaRespostaOpenAI([
                 [
                     'id' => $candidata->id,
                     'semelhanca' => 95,

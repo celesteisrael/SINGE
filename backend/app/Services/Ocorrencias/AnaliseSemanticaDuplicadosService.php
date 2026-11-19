@@ -26,19 +26,19 @@ class AnaliseSemanticaDuplicadosService
         Ocorrencia $ocorrencia,
         array $candidatas,
     ): array {
-        if (! config('services.ollama.enabled') || $candidatas === []) {
+        if (! config('services.openai.enabled') || $candidatas === []) {
             return [];
         }
 
         try {
             $baseUrl = rtrim(
-                (string) config('services.ollama.base_url'),
+                (string) config('services.openai.base_url'),
                 '/',
             );
+            $apiKey = trim((string) config('services.openai.api_key'));
+            $model = (string) config('services.openai.model');
 
-            $model = (string) config('services.ollama.model');
-
-            if ($baseUrl === '' || $model === '') {
+            if ($baseUrl === '' || $apiKey === '' || $model === '') {
                 return [];
             }
 
@@ -89,16 +89,18 @@ class AnaliseSemanticaDuplicadosService
             }
 
             $resposta = Http::acceptJson()
+                ->withToken($apiKey)
                 ->connectTimeout(
-                    (int) config('services.ollama.connect_timeout', 5),
+                    (int) config('services.openai.connect_timeout', 5),
                 )
                 ->timeout(
-                    (int) config('services.ollama.timeout', 30),
+                    (int) config('services.openai.timeout', 120),
                 )
-                ->post($baseUrl . '/api/chat', [
+                ->post($baseUrl . '/chat/completions', [
                     'model' => $model,
-                    'stream' => false,
-                    'format' => 'json',
+                    'reasoning_effort' => (string) config('services.openai.reasoning_effort', 'none'),
+                    'max_completion_tokens' => (int) config('services.openai.max_output_tokens', 6000),
+                    'response_format' => ['type' => 'json_object'],
                     'messages' => [
                         [
                             'role' => 'system',
@@ -137,14 +139,11 @@ PROMPT,
                             'content' => $conteudo,
                         ],
                     ],
-                    'options' => [
-                        'temperature' => 0.1,
-                    ],
                 ]);
 
             if (! $resposta->successful()) {
                 Log::warning(
-                    'Ollama não conseguiu analisar possíveis duplicados.',
+                    'OpenAI não conseguiu analisar possíveis duplicados.',
                     [
                         'ocorrencia_id' => $ocorrencia->id,
                         'http_status' => $resposta->status(),
@@ -154,7 +153,7 @@ PROMPT,
                 return [];
             }
 
-            $texto = $resposta->json('message.content');
+            $texto = $resposta->json('choices.0.message.content');
 
             if (! is_string($texto) || trim($texto) === '') {
                 return [];

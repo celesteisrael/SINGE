@@ -35,12 +35,15 @@ return [
         ],
     ],
 
-    'ollama' => [
-        'enabled' => env('OLLAMA_ENABLED', true),
-        'base_url' => env('OLLAMA_BASE_URL', 'http://localhost:11434'),
-        'model' => env('OLLAMA_MODEL', 'qwen3:1.7b'),
-        'timeout' => (int) env('OLLAMA_TIMEOUT', 30),
-        'connect_timeout' => (int) env('OLLAMA_CONNECT_TIMEOUT', 5),
+    'openai' => [
+        'enabled' => env('OPENAI_ENABLED', true),
+        'api_key' => env('OPENAI_API_KEY'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        'model' => env('OPENAI_MODEL', 'gpt-6.1-terra'),
+        'reasoning_effort' => env('OPENAI_REASONING_EFFORT', 'none'),
+        'max_output_tokens' => (int) env('OPENAI_MAX_OUTPUT_TOKENS', 6000),
+        'timeout' => (int) env('OPENAI_TIMEOUT', 120),
+        'connect_timeout' => (int) env('OPENAI_CONNECT_TIMEOUT', 5),
     ],
 
 ];

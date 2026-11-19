@@ -376,9 +376,10 @@ it('denies operators generic occurrence changes, priority evaluation, missions a
 
 it('returns deterministic and semantic duplicate suggestions when an operator registers an occurrence', function () {
     config([
-        'services.ollama.enabled' => true,
-        'services.ollama.base_url' => 'http://localhost:11434',
-        'services.ollama.model' => 'qwen3:1.7b',
+        'services.openai.enabled' => true,
+        'services.openai.api_key' => 'test-api-key',
+        'services.openai.base_url' => 'https://api.openai.test/v1',
+        'services.openai.model' => 'gpt-6.1-terra',
     ]);
 
     $operator = operatorApiUser('Operador');
@@ -397,17 +398,21 @@ it('returns deterministic and semantic duplicate suggestions when an operator re
 
     Http::fake([
         '*' => Http::response([
-            'message' => [
-                'content' => json_encode([
-                    'resultados' => [
-                        [
-                            'id' => $candidate->id,
-                            'semelhanca' => 95,
-                            'possivel_duplicado' => true,
-                            'justificacao' => 'Os relatos descrevem aparentemente a mesma cheia.',
-                        ],
+            'choices' => [
+                [
+                    'message' => [
+                        'content' => json_encode([
+                            'resultados' => [
+                                [
+                                    'id' => $candidate->id,
+                                    'semelhanca' => 95,
+                                    'possivel_duplicado' => true,
+                                    'justificacao' => 'Os relatos descrevem aparentemente a mesma cheia.',
+                                ],
+                            ],
+                        ], JSON_UNESCAPED_UNICODE),
                     ],
-                ], JSON_UNESCAPED_UNICODE),
+                ],
             ],
         ], 200),
     ]);
@@ -445,9 +450,10 @@ it('returns deterministic and semantic duplicate suggestions when an operator re
 
 it('registers an operator occurrence even when semantic duplicate analysis fails', function () {
     config([
-        'services.ollama.enabled' => true,
-        'services.ollama.base_url' => 'http://localhost:11434',
-        'services.ollama.model' => 'qwen3:1.7b',
+        'services.openai.enabled' => true,
+        'services.openai.api_key' => 'test-api-key',
+        'services.openai.base_url' => 'https://api.openai.test/v1',
+        'services.openai.model' => 'gpt-6.1-terra',
     ]);
 
     $operator = operatorApiUser('Operador');
@@ -466,7 +472,7 @@ it('registers an operator occurrence even when semantic duplicate analysis fails
 
     Http::fake([
         '*' => Http::response([
-            'error' => 'Ollama indisponível.',
+            'error' => 'OpenAI indisponível.',
         ], 500),
     ]);
 
@@ -492,4 +498,3 @@ it('registers an operator occurrence even when semantic duplicate analysis fails
         ->not->toBeNull()
         ->and(ValidacaoOcorrencia::query()->count())->toBe(0);
 });
-

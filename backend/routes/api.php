@@ -93,8 +93,12 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::middleware('perfil:Administrador,Coordenador,Operador')
-    ->post('/avaliacoes-prioridade', [AvaliacaoPrioridadeController::class, 'store'])
-    ->name('avaliacoes-prioridade.store');
+        ->post('/avaliacoes-prioridade', [AvaliacaoPrioridadeController::class, 'store'])
+        ->name('avaliacoes-prioridade.store');
+
+    Route::middleware('perfil:Administrador,Coordenador,Operador')
+        ->post('/avaliacoes-prioridade/sugerir', [AvaliacaoPrioridadeController::class, 'suggest'])
+        ->name('avaliacoes-prioridade.suggest');
 
     Route::middleware('perfil:Administrador,Coordenador')->group(function (): void {
         Route::get('/alertas-publicos/gestao/lista', [AlertaPublicoController::class, 'managementIndex'])->name('alertas-publicos.management.index');

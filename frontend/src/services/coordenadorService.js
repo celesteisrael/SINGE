@@ -32,6 +32,13 @@ export const coordenadorService = {
   async evaluate(payload) {
     return dataOf(await api.post('/avaliacoes-prioridade', payload));
   },
+
+  async suggestPriority(ocorrenciaId) {
+    return dataOf(await api.post('/avaliacoes-prioridade/sugerir', {
+      ocorrencia_id: ocorrenciaId,
+    }));
+  },
+
   async teams(filters = {}) {
     const params = new URLSearchParams(Object.entries(filters)
       .filter(([, value]) => value !== '' && value !== null && value !== undefined)

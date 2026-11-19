@@ -64,6 +64,7 @@ export function CoordenadorWorkspace({ user, onLogout }) {
   const [factors, setFactors] = useState([]);
   const [scores, setScores] = useState({});
   const [evaluations, setEvaluations] = useState([]);
+  const [aiSuggestion, setAiSuggestion] = useState(null);
   const [teams, setTeams] = useState([]);
   const [teamFilters, setTeamFilters] = useState({ q: '', estado: '', tipo_equipa_id: '' });
   const teamFiltersRef = useRef(teamFilters);
@@ -129,10 +130,48 @@ export function CoordenadorWorkspace({ user, onLogout }) {
     try {
       const details = await coordenadorService.ocorrencia(item.id);
       setSelectedOccurrence(details);
+      setAiSuggestion(null);
       setEvaluations(details.avaliacoes || []);
       setScores(Object.fromEntries(factors.map(factor => [factor.id, 0])));
     } catch (requestError) {
       setError(requestError.message || 'Não foi possível consultar a ocorrência.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const requestPrioritySuggestion = async () => {
+    if (!selectedOccurrence) return;
+
+    setBusy(true);
+    setError('');
+    setAiSuggestion(null);
+
+    try {
+      const result = await coordenadorService.suggestPriority(selectedOccurrence.id);
+
+      setAiSuggestion(result);
+
+      if (!result.disponivel) {
+        setError(result.aviso || 'Não foi possível obter sugestões da IA.');
+        return;
+      }
+
+      setScores(previous => {
+        const next = { ...previous };
+
+        result.sugestoes.forEach(suggestion => {
+          if (suggestion.dados_suficientes && suggestion.pontuacao !== null) {
+            next[suggestion.fator_prioridade_id] = suggestion.pontuacao;
+          }
+        });
+
+        return next;
+      });
+
+      toast.success('Sugestões da IA recebidas. Revê as pontuações antes de guardar.');
+    } catch (requestError) {
+      setError(requestError.message || 'Não foi possível solicitar sugestões à IA.');
     } finally {
       setBusy(false);
     }
@@ -332,7 +371,80 @@ export function CoordenadorWorkspace({ user, onLogout }) {
         <div className="mb-3 flex items-start justify-between"><div><h3 className="font-semibold">{selectedOccurrence.titulo}</h3><p className="text-sm text-muted">{selectedOccurrence.tipo} · {selectedOccurrence.localizacao}</p></div><button className="text-brand underline" onClick={() => setSelectedOccurrence(null)}>Fechar</button></div>
         {selectedOccurrence.validacoes?.map(validation => <p key={validation.id} className="mb-2 text-sm">Validação {validation.estado} · {validation.responsavel} · {validation.motivo || validation.observacoes || '—'}</p>)}
         <form className="space-y-3" onSubmit={submitEvaluation}>
-          {factors.map(factor => <Field key={factor.id} label={`${factor.nome} (${Number(factor.peso) * 100}%)`}><input className={input} type="number" min="0" max="10" step="0.1" value={scores[factor.id] ?? 0} onChange={event => setScores({ ...scores, [factor.id]: event.target.value })} /><span className="text-xs text-muted">{factor.descricao}</span></Field>)}
+
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-900 dark:bg-orange-950/30">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="font-semibold text-ink dark:text-dink">
+                  Assistência de Inteligência Artificial
+                </h4>
+                <p className="text-xs text-muted">
+                  A IA sugere pontuações. A decisão final pertence ao avaliador.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={busy}
+                onClick={requestPrioritySuggestion}
+                className="rounded-lg bg-brand px-3 py-2 text-sm text-white disabled:opacity-50"
+              >
+                Sugerir prioridade com IA
+              </button>
+            </div>
+
+            {aiSuggestion?.aviso && (
+              <p className="mt-2 text-sm text-muted">{aiSuggestion.aviso}</p>
+            )}
+
+            {aiSuggestion?.fatores_sem_informacao?.length > 0 && (
+              <p className="mt-2 text-sm text-orange-800 dark:text-orange-300">
+                Informação insuficiente: {aiSuggestion.fatores_sem_informacao.join(', ')}.
+                Estes factores precisam de avaliação humana.
+              </p>
+            )}
+          </div>
+
+          {factors.map(factor => {
+            const suggestion = aiSuggestion?.sugestoes?.find(
+              item => item.fator_prioridade_id === factor.id
+            );
+
+            return (
+              <Field
+                key={factor.id}
+                label={`${factor.nome} (${Number(factor.peso) * 100}%)`}
+              >
+                <input
+                  className={input}
+                  type="number"
+                  min="0"
+                  max="10"
+                  step="0.1"
+                  value={scores[factor.id] ?? 0}
+                  onChange={event => setScores({
+                    ...scores,
+                    [factor.id]: event.target.value,
+                  })}
+                />
+
+                <span className="text-xs text-muted">{factor.descricao}</span>
+
+                {suggestion && (
+                  <span className="block rounded bg-light p-2 text-xs dark:bg-dsidebar">
+                    **Sugestão da IA:** {
+                      suggestion.pontuacao === null
+                        ? 'Sem pontuação — informação insuficiente.'
+                        : `${suggestion.pontuacao}/10`
+                    }
+                    <br />
+                    **Justificação:** {suggestion.justificacao}
+                  </span>
+                )}
+              </Field>
+            );
+          })}    
+                
           <p className="rounded bg-light p-3 text-sm dark:bg-dsidebar">Pontuação ponderada: <strong>{totalScore.toFixed(2)}/10</strong> · Prioridade prevista: <strong>{priorityPreview}</strong></p>
           <button type="submit" disabled={busy} className="rounded-lg bg-brand px-4 py-2 text-sm text-white disabled:opacity-50">Guardar avaliação</button>
         </form>

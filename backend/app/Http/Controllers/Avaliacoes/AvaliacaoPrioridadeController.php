@@ -9,6 +9,7 @@ use App\Models\FatorPrioridade;
 use App\Services\Avaliacoes\AvaliacaoPrioridadeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Services\Avaliacoes\SugestaoPrioridadeIAService;
 
 class AvaliacaoPrioridadeController extends SingeApiController
 {
@@ -70,5 +71,19 @@ class AvaliacaoPrioridadeController extends SingeApiController
                 ]),
             )->all(),
         ];
+    }
+
+    public function suggest(
+        Request $request,
+        SugestaoPrioridadeIAService $service,
+    ): JsonResponse {
+        $dados = $request->validate([
+            'ocorrencia_id' => ['required', 'integer', 'exists:ocorrencias,id'],
+        ]);
+
+        return $this->execute(
+            fn (): array => $service->sugerir((int) $dados['ocorrencia_id']),
+            'Sugestão de prioridade consultada com sucesso.',
+        );
     }
 }
