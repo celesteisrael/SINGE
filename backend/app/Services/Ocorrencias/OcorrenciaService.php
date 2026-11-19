@@ -110,7 +110,11 @@ class OcorrenciaService
     /** @param array<string, mixed> $dados */
     public function atualizar(Ocorrencia $ocorrencia, array $dados, User $utilizador): Ocorrencia
     {
+        $perfil = $this->nomePerfil($utilizador);
         $this->autorizarActualizacao($ocorrencia, $utilizador);
+        if ($perfil === 'Operador' && (array_diff(array_keys($dados), ['descricao']) !== [] || trim((string) ($dados['descricao'] ?? '')) === '')) {
+            throw new AuthorizationException('O Operador só pode complementar a descrição da ocorrência.');
+        }
         $campos = array_intersect_key($dados, array_flip(self::CAMPOS_EDITAVEIS));
         $this->validarDados($campos, parcial: true);
 
@@ -376,6 +380,8 @@ class OcorrenciaService
 
         return [
             'total' => (int) $estadosOcorrencia->sum(),
+            'resolvidas' => (int) $estadosOcorrencia->get(EstadoOcorrencia::RESOLVIDA->value, 0),
+            'canceladas' => (int) $estadosOcorrencia->get(EstadoOcorrencia::CANCELADA->value, 0),
             'pendentes_analise' => $pendentesAnalise,
             'validadas' => (int) $estadosValidacao->get('VALIDADA', 0),
             'nao_confirmadas' => (int) $estadosValidacao->get('NAO_CONFIRMADA', 0),
@@ -432,6 +438,9 @@ class OcorrenciaService
     private function autorizarActualizacao(Ocorrencia $ocorrencia, User $utilizador): void
     {
         $perfil = $this->nomePerfil($utilizador);
+        if ($perfil === 'Operador') {
+            return;
+        }
         if (in_array($perfil, self::PERFIS_GESTORES, true)) {
             return;
         }

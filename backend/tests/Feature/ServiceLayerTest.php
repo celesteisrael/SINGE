@@ -65,11 +65,10 @@ function singeOccurrenceFor(User $user, ?Prioridade $priority = null): Ocorrenci
 function singeOfficialFactors(): array
 {
     return [
-        FatorPrioridade::query()->create(['nome' => 'Gravidade', 'peso' => 0.30, 'ativo' => true]),
-        FatorPrioridade::query()->create(['nome' => 'Pessoas afectadas', 'peso' => 0.25, 'ativo' => true]),
-        FatorPrioridade::query()->create(['nome' => 'Vulnerabilidade', 'peso' => 0.20, 'ativo' => true]),
-        FatorPrioridade::query()->create(['nome' => 'Localização', 'peso' => 0.15, 'ativo' => true]),
-        FatorPrioridade::query()->create(['nome' => 'Escassez de recursos', 'peso' => 0.10, 'ativo' => true]),
+        FatorPrioridade::query()->create(['nome' => 'Gravidade', 'peso' => 0.35, 'ativo' => true]),
+        FatorPrioridade::query()->create(['nome' => 'Pessoas afectadas', 'peso' => 0.29, 'ativo' => true]),
+        FatorPrioridade::query()->create(['nome' => 'Vulnerabilidade', 'peso' => 0.24, 'ativo' => true]),
+        FatorPrioridade::query()->create(['nome' => 'Escassez de recursos', 'peso' => 0.12, 'ativo' => true]),
     ];
 }
 
@@ -108,7 +107,7 @@ function singeMissionFixture(string $teamState = 'disponivel'): array
     return [$coordinator, $team, $incident];
 }
 
-it('calcula a pontuação oficial com os cinco factores e classifica os limites pelo nome configurado', function () {
+it('calcula a pontuação oficial com os quatro factores e classifica os limites pelo nome configurado', function () {
     $factors = singeOfficialFactors();
     $priorities = singePriorities();
     $service = new AvaliacaoPrioridadeService;
@@ -117,9 +116,8 @@ it('calcula a pontuação oficial com os cinco factores e classifica os limites 
         ['fator_prioridade_id' => $factors[0]->id, 'pontuacao' => 6],
         ['fator_prioridade_id' => $factors[1]->id, 'pontuacao' => 5],
         ['fator_prioridade_id' => $factors[2]->id, 'pontuacao' => 4],
-        ['fator_prioridade_id' => $factors[3]->id, 'pontuacao' => 7],
-        ['fator_prioridade_id' => $factors[4]->id, 'pontuacao' => 2],
-    ]))->toBe(5.1)
+        ['fator_prioridade_id' => $factors[3]->id, 'pontuacao' => 2],
+    ]))->toBe(4.75)
         ->and($service->determinarPrioridade(2.49)->is($priorities[3]))->toBeTrue()
         ->and($service->determinarPrioridade(2.50)->is($priorities[2]))->toBeTrue()
         ->and($service->determinarPrioridade(4.99)->is($priorities[2]))->toBeTrue()
@@ -143,11 +141,10 @@ it('configura os cinco pesos oficiais e desactiva os factores legados incompatí
     expect(FatorPrioridade::query()->where('ativo', true)->orderBy('id')->get()->mapWithKeys(
         fn (FatorPrioridade $factor): array => [$factor->nome => (float) $factor->peso],
     )->all())->toBe([
-        'Gravidade' => 0.3,
-        'Pessoas afectadas' => 0.25,
-        'Vulnerabilidade' => 0.2,
-        'Localização' => 0.15,
-        'Escassez de recursos' => 0.1,
+        'Gravidade' => 0.35,
+        'Pessoas afectadas' => 0.29,
+        'Vulnerabilidade' => 0.24,
+        'Escassez de recursos' => 0.12,
     ])
         ->and(FatorPrioridade::query()->where('ativo', false)->count())->toBe(4);
 });
@@ -161,19 +158,19 @@ it('rejeita factores em falta, duplicados, inactivos e desconhecidos', function 
         ->toThrow(InvalidArgumentException::class, 'exactamente uma vez');
 
     $duplicate = $scores;
-    $duplicate[4]['fator_prioridade_id'] = $factors[0]->id;
+    $duplicate[3]['fator_prioridade_id'] = $factors[0]->id;
     expect(fn () => $service->calcularPontuacaoPonderada($duplicate))
         ->toThrow(InvalidArgumentException::class, 'repetir factores');
 
-    $factors[4]->ativo = false;
-    $factors[4]->save();
+    $factors[3]->ativo = false;
+    $factors[3]->save();
     expect(fn () => $service->calcularPontuacaoPonderada($scores))
-        ->toThrow(RuntimeException::class, 'cinco factores oficiais');
+        ->toThrow(RuntimeException::class, 'quatro factores oficiais');
 
-    $factors[4]->ativo = true;
-    $factors[4]->save();
+    $factors[3]->ativo = true;
+    $factors[3]->save();
     $unknown = $scores;
-    $unknown[4]['fator_prioridade_id'] = 99999;
+    $unknown[3]['fator_prioridade_id'] = 99999;
     expect(fn () => $service->calcularPontuacaoPonderada($unknown))
         ->toThrow(InvalidArgumentException::class, 'desconhecido ou inactivo');
 });
@@ -191,12 +188,12 @@ it('impede avaliações com pesos divergentes e pontuações fora de 0 a 10', fu
     expect(fn () => $service->calcularPontuacaoPonderada($scores))
         ->toThrow(InvalidArgumentException::class, 'entre 0 e 10');
 
-    $factors[0]->peso = 0.31;
+    $factors[0]->peso = 0.36;
     $factors[0]->save();
     expect(fn () => $service->calcularPontuacaoPonderada(singeFactorScores($factors)))
         ->toThrow(RuntimeException::class, 'soma dos pesos');
 
-    $factors[1]->peso = 0.24;
+    $factors[1]->peso = 0.28;
     $factors[1]->save();
     expect(fn () => $service->calcularPontuacaoPonderada(singeFactorScores($factors)))
         ->toThrow(RuntimeException::class, 'peso configurado');
@@ -276,13 +273,12 @@ it('preserva os pesos usados em cada detalhe da avaliação', function () {
     $snapshot = $assessment->fresh('detalhes')->detalhes->first();
 
     expect($savedFactorWeights)->toBe([
-        $factors[0]->id => '0.30',
-        $factors[1]->id => '0.25',
-        $factors[2]->id => '0.20',
-        $factors[3]->id => '0.15',
-        $factors[4]->id => '0.10',
+        $factors[0]->id => '0.35',
+        $factors[1]->id => '0.29',
+        $factors[2]->id => '0.24',
+        $factors[3]->id => '0.12',
     ])->and($snapshot->fator_nome_snapshot)->toBe('Gravidade')
-        ->and($snapshot->contribuicao_ponderada)->toBe('1.50')
+        ->and($snapshot->contribuicao_ponderada)->toBe('1.75')
         ->and($incident->fresh()->prioridade_id)->toBe($priorities[1]->id);
 });
 

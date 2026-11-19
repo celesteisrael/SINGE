@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Card } from '../../components/common/CommonComponents';
+import { Card, StatCard } from '../../components/common/CommonComponents';
 import { useToast } from '../../contexts/ToastContext';
 import { evidenciasService } from '../../services/evidenciasService';
 import { ocorrenciasService } from '../../services/ocorrenciasService';
@@ -12,6 +12,7 @@ import { OperadorLayout } from './OperadorLayout';
 import { OperadorOcorrencias } from './OperadorOcorrencias';
 import { RegistarOcorrencia } from './RegistarOcorrencia';
 import { GestaoVerificacoesIdentidade } from '../admin/GestaoVerificacoesIdentidade';
+import { CidadaoPerfil } from '../cidadao/CidadaoPerfil';
 import { identidadeService } from '../../services/identidadeService';
 
 const EMPTY_RESULT = {
@@ -136,7 +137,7 @@ export function OperadorWorkspace({ user, onLogout }) {
     }
   }, []);
 
-  useEffect(() => { if (page === 'avisos') loadAvisos(); }, [page, loadAvisos]);
+  useEffect(() => { if (page === 'avisos' || page === 'dashboard') loadAvisos(); }, [page, loadAvisos]);
 
   useEffect(() => {
     if (page !== 'dashboard') return;
@@ -208,11 +209,11 @@ export function OperadorWorkspace({ user, onLogout }) {
 
   return (
     <OperadorLayout user={user} page={page} setPage={setPage} onLogout={logout}>
-      {page === 'identidade' ? (
+      {page === 'perfil' ? <CidadaoPerfil user={user} showIdentity={false} /> : page === 'identidade' ? (
         <GestaoVerificacoesIdentidade />
       ) : page === 'avisos' ? (
         <div className="space-y-4">
-          <div><h1 className="text-xl font-bold text-ink dark:text-dink">Notificações e alertas públicos</h1><p className="text-sm text-muted">Notificações privadas da sua conta e alertas institucionais publicados.</p></div>
+          <div><h1 className="text-xl font-bold text-ink dark:text-dink">Alertas públicos e notificações</h1><p className="text-sm text-muted">Notificações privadas da sua conta e alertas institucionais publicados.</p></div>
           {avisosError && <Card className="text-sm text-red-700" role="alert">{avisosError}<button className="ml-2 underline" onClick={loadAvisos}>Tentar novamente</button></Card>}
           {avisosLoading ? <Card role="status">A carregar avisos…</Card> : <>
             <Card><h2 className="mb-3 font-semibold">Notificações privadas</h2>{notificacoes.length === 0 ? <p className="text-sm text-muted">Sem notificações.</p> : notificacoes.map(item => <article key={item.id} className="flex flex-wrap justify-between gap-2 border-t py-3"><div><p className="font-medium">{item.titulo}</p><p className="text-sm text-muted">{item.mensagem}</p><p className="text-xs text-muted">{item.tipo} · {item.created_at ? new Date(item.created_at).toLocaleString() : ''}</p></div>{!item.lida && <button className="text-sm text-brand underline" onClick={() => markNotificationRead(item.id)}>Marcar como lida</button>}</article>)}</Card>
@@ -240,6 +241,7 @@ export function OperadorWorkspace({ user, onLogout }) {
             </Card>
           )}
           <OperadorOcorrencias
+            estatisticas={result.estatisticas}
             ocorrencias={result.items}
             pagination={result.pagination}
             filters={filters}

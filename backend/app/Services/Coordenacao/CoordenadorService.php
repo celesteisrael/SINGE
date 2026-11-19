@@ -3,6 +3,7 @@
 namespace App\Services\Coordenacao;
 
 use App\Models\AvaliacaoPrioridade;
+use App\Models\AlertaPublico;
 use App\Models\Missao;
 use App\Models\Ocorrencia;
 use App\Models\Prioridade;
@@ -75,9 +76,11 @@ class CoordenadorService
                 'activas' => (int) $missoes->get(EstadoMissao::EM_DESLOCACAO->value, 0)
                     + (int) $missoes->get(EstadoMissao::EM_EXECUCAO->value, 0),
                 'pendentes' => (int) $missoes->get(EstadoMissao::ATRIBUIDA->value, 0),
+                'total' => (int) $missoes->sum(),
                 'concluidas' => (int) $missoes->get(EstadoMissao::CONCLUIDA->value, 0),
                 'canceladas' => (int) $missoes->get(EstadoMissao::CANCELADA->value, 0),
             ],
+            'alertas_publicados' => AlertaPublico::query()->where('estado', 'publicado')->count(),
             'recentes' => Ocorrencia::query()->with(['tipoOcorrencia', 'prioridade'])
                 ->latest()->limit(8)->get(),
             'mapa_ocorrencias' => Ocorrencia::query()
@@ -140,9 +143,9 @@ class CoordenadorService
                 $term = trim((string) $filtros['q']);
                 $query->where(fn ($builder) => $builder
                     ->where('titulo', 'like', "%{$term}%")
-                    ->orWhere('descricao', 'like', "%{$term}%")
                     ->orWhere('localizacao', 'like', "%{$term}%")
-                    ->when(ctype_digit($term), fn ($nested) => $nested->orWhere('id', (int) $term)));
+                    ->orWhereHas('localizacaoGeografica.provincia', fn ($location) => $location->where('nome', 'like', "%{$term}%"))
+                    ->orWhereHas('localizacaoGeografica.distrito', fn ($location) => $location->where('nome', 'like', "%{$term}%")));
             })
             ->latest()
             ->paginate($porPagina);

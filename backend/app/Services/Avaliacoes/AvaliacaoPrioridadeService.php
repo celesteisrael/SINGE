@@ -28,11 +28,10 @@ class AvaliacaoPrioridadeService
      * @var array<string, float>
      */
     private const PESOS_OFICIAIS = [
-        'gravidade' => 0.30,
-        'pessoas afectadas' => 0.25,
-        'vulnerabilidade' => 0.20,
-        'localizacao' => 0.15,
-        'escassez de recursos' => 0.10,
+        'gravidade' => 0.35,
+        'pessoas afectadas' => 0.29,
+        'vulnerabilidade' => 0.24,
+        'escassez de recursos' => 0.12,
     ];
 
     /**
@@ -251,7 +250,7 @@ class AvaliacaoPrioridadeService
     private function validarConfiguracaoDosFatores(Collection $fatoresAtivos): void
     {
         if ($fatoresAtivos->count() !== count(self::PESOS_OFICIAIS)) {
-            throw new RuntimeException('A configuração deve conter exactamente os cinco factores oficiais activos.');
+            throw new RuntimeException('A configuração deve conter exactamente os quatro factores oficiais activos.');
         }
 
         $totalPeso = (float) $fatoresAtivos->sum(fn (FatorPrioridade $fator): float => (float) $fator->peso);

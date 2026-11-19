@@ -3,13 +3,15 @@ import { coordenadorService } from '../../services/coordenadorService';
 import { alertasPublicosService } from '../../services/alertasPublicosService';
 import { ValidationError } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import { Button } from '../../components/common/CommonComponents';
+import { Button, StatCard } from '../../components/common/CommonComponents';
+import Icon from '../../components/common/Icon';
+import { CidadaoPerfil } from '../cidadao/CidadaoPerfil';
 import { GestaoUtilizadores } from '../admin/GestaoUtilizadores';
 import { AuthenticatedLayout } from '../../components/layout/AuthenticatedLayout';
 import { adminService } from '../../services/adminService';
 import { AdminDashboardReal } from '../admin/AdminDashboardReal';
 import { MozambiqueMap } from '../../components/map/MapComponents';
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const TABS = [
   ['dashboard', 'Painel geral'],
@@ -18,10 +20,11 @@ const TABS = [
   ['equipas', 'Equipas'],
   ['missoes', 'Missões'],
   ['alertas', 'Alertas públicos'],
+  ['perfil', 'Meu perfil'],
 ];
 const MISSION_STATES = ['atribuida', 'em_deslocacao', 'em_execucao', 'concluida', 'cancelada'];
 const EMPTY_DASHBOARD = { ocorrencias: {}, equipas: {}, missoes: {}, recentes: [], actividade_recente: [] };
-const EMPTY_FILTERS = { q: '', estado: '', tipo_ocorrencia_id: '', prioridade_id: '', provincia: '', distrito: '', page: 1, per_page: 20 };
+const EMPTY_FILTERS = { q: '', estado: '', tipo_ocorrencia_id: '', prioridade_id: '', page: 1, per_page: 20 };
 
 function Card({ children, className = '' }) {
   return <section className={`rounded-xl border border-bd bg-white p-4 shadow-sm dark:border-dborder dark:bg-dcard ${className}`}>{children}</section>;
@@ -47,7 +50,7 @@ const input = 'w-full rounded-lg border border-bd bg-white px-3 py-2 text-sm tex
 const showDate = value => value ? new Date(value).toLocaleString() : '—';
 
 export function CoordenadorWorkspace({ user, onLogout }) {
-  const tabs = user.role === 'administrador' ? [...TABS, ['utilizadores', 'Gestão de utilizadores']] : TABS;
+  const tabs = user.role === 'administrador' ? [...TABS.filter(([id]) => !['prioridades', 'perfil'].includes(id)), ['utilizadores', 'Gestão de utilizadores'], ['perfil', 'Meu perfil']] : TABS;
   const toast = useToast();
   const [tab, setTab] = useState('dashboard');
   const [busy, setBusy] = useState(false);
@@ -123,6 +126,15 @@ export function CoordenadorWorkspace({ user, onLogout }) {
   }, [tab, loadDashboard, loadOccurrences, loadTeams, loadMissions, loadAlerts]);
 
   useEffect(() => { loadActiveTab(); }, [loadActiveTab]);
+
+  useEffect(() => { if (tab !== 'equipas') return; const timer = setTimeout(() => loadTeams(teamFilters), 250); return () => clearTimeout(timer); }, [tab, teamFilters.q, teamFilters.estado, teamFilters.tipo_equipa_id, loadTeams]);
+  useEffect(() => { if (tab !== 'missoes') return; const timer = setTimeout(() => loadMissions(missionFilters), 250); return () => clearTimeout(timer); }, [tab, missionFilters.q, missionFilters.estado, missionFilters.equipa_id, missionFilters.ocorrencia_id, loadMissions]);
+
+  useEffect(() => {
+    if (tab !== 'ocorrencias') return;
+    const timer = setTimeout(() => loadOccurrences({ ...filters, page: 1 }), 250);
+    return () => clearTimeout(timer);
+  }, [tab, filters.q, filters.estado, filters.tipo_ocorrencia_id, filters.prioridade_id, loadOccurrences]);
 
   const selectOccurrence = async item => {
     setBusy(true);
@@ -319,29 +331,22 @@ export function CoordenadorWorkspace({ user, onLogout }) {
     <div className="space-y-4">
       <PageTitle title="Centro de Coordenação" description="Indicadores agregados e recentes calculados pelo backend." />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          ['Ocorrências', dashboard.ocorrencias?.total],
-          ['Pendentes de análise', dashboard.ocorrencias?.pendentes_analise],
-          ['Sem prioridade', dashboard.ocorrencias?.sem_prioridade],
-          ['Validadas', dashboard.ocorrencias?.validadas],
-          ['Rejeitadas / não confirmadas', (dashboard.ocorrencias?.rejeitadas || 0) + (dashboard.ocorrencias?.nao_confirmadas || 0)],
-          ['Equipas disponíveis', dashboard.equipas?.disponiveis],
-          ['Equipas em missão', dashboard.equipas?.em_missao],
-          ['Missões activas', dashboard.missoes?.activas],
-          ['Missões concluídas', dashboard.missoes?.concluidas],
-        ].map(([label, value]) => <Card key={label}><p className="text-sm text-muted">{label}</p><p className="mt-1 text-2xl font-bold text-ink dark:text-dink">{value ?? '—'}</p></Card>)}
+        <StatCard icon="FileText" label="Número de ocorrências" value={dashboard.ocorrencias?.total ?? 0} tone="brand" />
+        <StatCard icon="Users" label="Equipas existentes" value={dashboard.equipas?.total ?? 0} tone="green" />
+        <StatCard icon="Target" label="Número de missões" value={dashboard.missoes?.total ?? 0} tone="orange" />
+        <StatCard icon="AlertTriangle" label="Alertas publicados" value={dashboard.alertas_publicados ?? dashboard.alertas_activos ?? 0} tone="red" />
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card><h3 className="mb-3 font-semibold">Evolução de ocorrências · 14 dias</h3><div className="h-56">{(dashboard.ocorrencias?.evolucao_14_dias || []).length ? <ResponsiveContainer width="100%" height="100%"><LineChart data={dashboard.ocorrencias.evolucao_14_dias}><CartesianGrid strokeDasharray="3 3" opacity={0.2} /><XAxis dataKey="dia" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} /><Tooltip /><Line dataKey="total" stroke="#2563eb" strokeWidth={3} /></LineChart></ResponsiveContainer> : <p className="text-sm text-muted">Sem registos neste período.</p>}</div></Card>
+
         <Card><h3 className="mb-3 font-semibold">Ocorrências por prioridade</h3><div className="h-56">{(dashboard.ocorrencias?.por_prioridade || []).some(item => Number(item.total)) ? <ResponsiveContainer width="100%" height="100%"><BarChart data={dashboard.ocorrencias.por_prioridade}><CartesianGrid strokeDasharray="3 3" opacity={0.2} /><XAxis dataKey="nome" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="total" fill="#dc2626" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer> : <p className="text-sm text-muted">Sem avaliações de prioridade.</p>}</div></Card>
         <Card><h3 className="mb-3 font-semibold">Ocorrências por tipo</h3><div className="h-56">{(dashboard.ocorrencias?.por_tipo || []).some(item => Number(item.total)) ? <ResponsiveContainer width="100%" height="100%"><BarChart data={dashboard.ocorrencias.por_tipo.filter(item => Number(item.total))}><CartesianGrid strokeDasharray="3 3" opacity={0.2} /><XAxis dataKey="nome" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="total" fill="#0f766e" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer> : <p className="text-sm text-muted">Sem ocorrências.</p>}</div></Card>
         <Card><h3 className="mb-3 font-semibold">Missões por estado</h3><div className="h-56">{(dashboard.missoes_por_estado || []).length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={dashboard.missoes_por_estado}><CartesianGrid strokeDasharray="3 3" opacity={0.2} /><XAxis dataKey="estado" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="total" fill="#7c3aed" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer> : <p className="text-sm text-muted">Ainda não existem missões.</p>}</div></Card>
-        <Card><h3 className="mb-3 font-semibold">Disponibilidade das equipas</h3>{[['Disponíveis', dashboard.equipas?.disponiveis], ['Em missão', dashboard.equipas?.em_missao], ['Indisponíveis', dashboard.equipas?.indisponiveis]].map(([label, total]) => <p className="flex justify-between border-b border-bd py-2 text-sm last:border-0 dark:border-dborder" key={label}><span>{label}</span><strong>{total ?? 0}</strong></p>)}</Card>
+
         <Card><h3 className="mb-3 font-semibold">Ocorrências por localização</h3>{(dashboard.mapa_ocorrencias || []).some(item => item.latitude != null && item.longitude != null) ? <MozambiqueMap ocorrencias={dashboard.mapa_ocorrencias} height={300} onSelectOccurrence={item => { setTab('ocorrencias'); selectOccurrence({ id: item.id }); }} /> : <p className="text-sm text-muted">Não existem ocorrências com coordenadas verificadas.</p>}</Card>
       </div>
       <Card><h3 className="mb-3 font-semibold">Ocorrências recentes</h3><Table headers={['ID', 'Título', 'Tipo', 'Estado', 'Prioridade', 'Data']}><>{(dashboard.recentes || []).map(item => <tr key={item.id}><td className="px-3 py-2">{item.id}</td><td className="px-3 py-2">{item.titulo}</td><td className="px-3 py-2">{item.tipo}</td><td className="px-3 py-2">{item.estado}</td><td className="px-3 py-2">{item.prioridade || '—'}</td><td className="px-3 py-2">{showDate(item.created_at)}</td></tr>)}</></Table></Card>
-      <Card><h3 className="mb-3 font-semibold">Avaliações recentes</h3>{(dashboard.actividade_recente || []).map(item => <p className="border-b border-bd py-2 text-sm dark:border-dborder" key={item.id}>{item.responsavel} avaliou “{item.ocorrencia_titulo}” como {item.prioridade} ({item.pontuacao_total}/10) · {showDate(item.created_at)}</p>)}</Card>
-      <Card><h3 className="mb-3 font-semibold">Actividade recente de missões</h3>{(dashboard.historico_missoes || []).map(item => <p className="border-b border-bd py-2 text-sm dark:border-dborder" key={item.id}>{item.responsavel} · missão #{item.missao_id} · {item.operacao} · {showDate(item.created_at)}</p>)}</Card>
+
+
     </div>
       )
   );
@@ -349,23 +354,21 @@ export function CoordenadorWorkspace({ user, onLogout }) {
   const renderOccurrences = () => (
     <div className="space-y-4">
       <PageTitle title="Monitorização de ocorrências" description="Pesquisa e filtros aplicados no servidor." />
+      <div className="grid gap-3 sm:grid-cols-3"><StatCard icon="FileText" label="Ocorrências registadas" value={dashboard.ocorrencias?.total ?? occurrences.pagination?.total ?? 0} tone="brand" /><StatCard icon="CheckCircle" label="Resolvidas" value={dashboard.ocorrencias?.por_estado?.resolvida ?? 0} tone="green" /><StatCard icon="XCircle" label="Canceladas" value={dashboard.ocorrencias?.por_estado?.cancelada ?? 0} tone="red" /></div>
       <Card className="grid gap-3 md:grid-cols-3">
-        <input className={input} placeholder="Pesquisar" value={filters.q} onChange={event => setFilters({ ...filters, q: event.target.value })} />
-        <select className={input} value={filters.estado} onChange={event => setFilters({ ...filters, estado: event.target.value })}><option value="">Todos os estados</option>{['registada', 'em_avaliacao', 'em_atendimento', 'resolvida', 'cancelada'].map(state => <option key={state}>{state}</option>)}</select>
-        <select className={input} value={filters.tipo_ocorrencia_id} onChange={event => setFilters({ ...filters, tipo_ocorrencia_id: event.target.value })}><option value="">Todos os tipos</option>{occurrenceTypes.map(type => <option key={type.id} value={type.id}>{type.nome}</option>)}</select>
-        <input className={input} placeholder="ID da prioridade" value={filters.prioridade_id} onChange={event => setFilters({ ...filters, prioridade_id: event.target.value })} />
-        <input className={input} placeholder="Província" value={filters.provincia} onChange={event => setFilters({ ...filters, provincia: event.target.value })} />
-        <input className={input} placeholder="Distrito" value={filters.distrito} onChange={event => setFilters({ ...filters, distrito: event.target.value })} />
-        <button className="rounded-lg bg-brand px-3 py-2 text-white" onClick={() => loadOccurrences({ ...filters, page: 1 })}>Aplicar filtros</button>
+        <input className={input} placeholder="Pesquisar por título ou localização" value={filters.q} onChange={event => setFilters({ ...filters, q: event.target.value, page: 1 })} />
+        <select className={input} value={filters.estado} onChange={event => setFilters({ ...filters, estado: event.target.value, page: 1 })}><option value="">Todos os estados</option>{['registada', 'em_avaliacao', 'em_atendimento', 'resolvida', 'cancelada'].map(state => <option key={state} value={state}>{state}</option>)}</select>
+        <select className={input} value={filters.tipo_ocorrencia_id} onChange={event => setFilters({ ...filters, tipo_ocorrencia_id: event.target.value, page: 1 })}><option value="">Todos os tipos</option>{occurrenceTypes.map(type => <option key={type.id} value={type.id}>{type.nome}</option>)}</select>
+        <select className={input} value={filters.prioridade_id} onChange={event => setFilters({ ...filters, prioridade_id: event.target.value, page: 1 })}><option value="">Todas as prioridades</option>{(dashboard.ocorrencias?.por_prioridade || []).map(item => <option key={item.id} value={item.id}>{item.nome}</option>)}</select>
       </Card>
-      <Card><Table headers={['ID', 'Título', 'Tipo', 'Localização', 'Estado', 'Prioridade', '']} >{occurrences.items.map(item => <tr key={item.id}><td className="px-3 py-2">{item.id}</td><td className="px-3 py-2">{item.titulo}</td><td className="px-3 py-2">{item.tipo}</td><td className="px-3 py-2">{[item.distrito, item.provincia].filter(Boolean).join(', ') || item.localizacao}</td><td className="px-3 py-2">{item.estado}</td><td className="px-3 py-2">{item.prioridade || '—'}</td><td className="px-3 py-2"><button className="text-brand underline" onClick={() => selectOccurrence(item)}>Detalhes</button></td></tr>)}</Table><div className="mt-3 flex justify-between text-sm"><span>Total: {occurrences.pagination?.total || 0}</span><div className="flex gap-2"><button disabled={(occurrences.pagination?.current_page || 1) <= 1} className="rounded border px-3 py-1 disabled:opacity-40" onClick={() => { const page = filters.page - 1; const next = { ...filters, page }; setFilters(next); loadOccurrences(next); }}>Anterior</button><button disabled={(occurrences.pagination?.current_page || 1) >= (occurrences.pagination?.last_page || 1)} className="rounded border px-3 py-1 disabled:opacity-40" onClick={() => { const page = filters.page + 1; const next = { ...filters, page }; setFilters(next); loadOccurrences(next); }}>Seguinte</button></div></div></Card>
+      <Card><Table headers={['ID', 'Título', 'Tipo', 'Localização', 'Estado', 'Prioridade', '']} >{occurrences.items.map(item => <tr key={item.id}><td className="px-3 py-2">{item.id}</td><td className="px-3 py-2">{item.titulo}</td><td className="px-3 py-2">{item.tipo}</td><td className="px-3 py-2">{[item.distrito, item.provincia].filter(Boolean).join(', ') || item.localizacao}</td><td className="px-3 py-2">{item.estado}</td><td className="px-3 py-2">{item.prioridade || '—'}</td><td className="px-3 py-2"><button aria-label={`Ver ocorrência ${item.id}`} className="rounded p-1.5 text-brand hover:bg-light dark:hover:bg-dsidebar" onClick={() => selectOccurrence(item)}><Icon name="Eye" size={16} /></button></td></tr>)}</Table><div className="mt-3 flex justify-between text-sm"><span>Total: {occurrences.pagination?.total || 0}</span><div className="flex gap-2"><button disabled={(occurrences.pagination?.current_page || 1) <= 1} className="rounded border px-3 py-1 disabled:opacity-40" onClick={() => { const page = filters.page - 1; const next = { ...filters, page }; setFilters(next); loadOccurrences(next); }}>Anterior</button><button disabled={(occurrences.pagination?.current_page || 1) >= (occurrences.pagination?.last_page || 1)} className="rounded border px-3 py-1 disabled:opacity-40" onClick={() => { const page = filters.page + 1; const next = { ...filters, page }; setFilters(next); loadOccurrences(next); }}>Seguinte</button></div></div></Card>
       {selectedOccurrence && <OccurrenceDetail occurrence={selectedOccurrence} onClose={() => setSelectedOccurrence(null)} />}
     </div>
   );
 
   const renderPriorities = () => (
     <div className="space-y-4">
-      <PageTitle title="Avaliação formal de prioridade" description="Cinco factores oficiais, pesos e classificação calculados pelo sistema." />
+      <PageTitle title="Avaliação formal de prioridade" description="Quatro factores oficiais, pesos e classificação calculados pelo sistema." />
       <ErrorMessage error={error} />
       {selectedOccurrence ? <Card>
         <div className="mb-3 flex items-start justify-between"><div><h3 className="font-semibold">{selectedOccurrence.titulo}</h3><p className="text-sm text-muted">{selectedOccurrence.tipo} · {selectedOccurrence.localizacao}</p></div><button className="text-brand underline" onClick={() => setSelectedOccurrence(null)}>Fechar</button></div>
@@ -443,8 +446,8 @@ export function CoordenadorWorkspace({ user, onLogout }) {
                 )}
               </Field>
             );
-          })}    
-                
+          })}
+
           <p className="rounded bg-light p-3 text-sm dark:bg-dsidebar">Pontuação ponderada: <strong>{totalScore.toFixed(2)}/10</strong> · Prioridade prevista: <strong>{priorityPreview}</strong></p>
           <button type="submit" disabled={busy} className="rounded-lg bg-brand px-4 py-2 text-sm text-white disabled:opacity-50">Guardar avaliação</button>
         </form>
@@ -461,13 +464,18 @@ export function CoordenadorWorkspace({ user, onLogout }) {
         <input className={input} placeholder="Pesquisar equipa" value={teamFilters.q} onChange={event => setTeamFilters({ ...teamFilters, q: event.target.value })} />
         <select className={input} value={teamFilters.estado} onChange={event => setTeamFilters({ ...teamFilters, estado: event.target.value })}><option value="">Todos os estados</option>{['disponivel', 'em_missao', 'indisponivel'].map(state => <option key={state}>{state}</option>)}</select>
         <select className={input} value={teamFilters.tipo_equipa_id} onChange={event => setTeamFilters({ ...teamFilters, tipo_equipa_id: event.target.value })}><option value="">Todos os tipos</option>{teamTypes.map(type => <option key={type.id} value={type.id}>{type.nome}</option>)}</select>
-        <button className="rounded-lg bg-brand px-3 py-2 text-white" onClick={() => loadTeams(teamFilters)}>Pesquisar</button>
+
       </Card>
       <div className="grid gap-3 lg:grid-cols-2">{teams.map(team => <Card key={team.id}>
         <div className="flex justify-between gap-3"><div><h3 className="font-semibold">{team.nome}</h3><p className="text-sm text-muted">{team.tipo_equipa} · {team.estado}</p></div>
           <select aria-label={`Disponibilidade ${team.nome}`} className={`${input} max-w-40`} value={team.estado} disabled={team.estado === 'em_missao'} onChange={async event => { await coordenadorService.teamAvailability(team.id, event.target.value); await loadTeams(); toast.success('Disponibilidade actualizada.'); }}><option value="disponivel">disponivel</option><option value="indisponivel">indisponivel</option></select>
         </div>
         <p className="mt-3 text-sm font-medium">Membros ({team.membros?.length || 0})</p>{(team.membros || []).map(member => <p className="text-sm text-muted" key={member.id}>{member.nome} · {member.perfil}</p>)}
+        <form className="mt-3 grid grid-cols-2 gap-2" onSubmit={async event => { event.preventDefault(); const form = new FormData(event.currentTarget); const lat = form.get('latitude'); const lon = form.get('longitude'); try { await coordenadorService.updateTeamLocation(team.id, lat === '' ? null : Number(lat), lon === '' ? null : Number(lon)); await loadTeams(); toast.success('Localização da equipa actualizada.'); } catch (e) { toast.error(e.message || 'Não foi possível guardar a localização.'); } }}>
+          <label className="text-xs text-muted">Latitude<input name="latitude" type="number" step="any" min="-90" max="90" defaultValue={team.latitude ?? ''} className={input} /></label>
+          <label className="text-xs text-muted">Longitude<input name="longitude" type="number" step="any" min="-180" max="180" defaultValue={team.longitude ?? ''} className={input} /></label>
+          <Button type="submit" size="sm" variant="secondary" className="col-span-2">Guardar localização da equipa</Button>
+        </form>
         <p className="mt-3 text-sm font-medium">Missões</p>{(team.missoes || []).map(mission => <p className="text-sm text-muted" key={mission.id}>#{mission.id} · {mission.estado} · {mission.ocorrencia_titulo}</p>)}
       </Card>)}</div>
     </div>
@@ -475,8 +483,9 @@ export function CoordenadorWorkspace({ user, onLogout }) {
 
   const renderMissions = () => (
     <div className="space-y-4">
-      <PageTitle title="Coordenação de missões" description="Criação, atribuição e acompanhamento com histórico de operações." />
-      <Card><h3 className="mb-3 font-semibold">Criar missão</h3>
+      <PageTitle title="Coordenação de missões" description={user.role === 'administrador' ? 'Consulta das missões existentes.' : 'Criação, atribuição e acompanhamento com histórico de operações.'} />
+      <div className="grid gap-3 sm:grid-cols-3"><StatCard icon="Clock" label="Missões atribuídas" value={missions.filter(item => item.estado === 'atribuida').length} tone="orange" /><StatCard icon="CheckCircle" label="Concluídas" value={missions.filter(item => item.estado === 'concluida').length} tone="green" /><StatCard icon="XCircle" label="Canceladas" value={missions.filter(item => item.estado === 'cancelada').length} tone="red" /></div>
+      {user.role !== 'administrador' && <Card><h3 className="mb-3 font-semibold">Criar missão</h3>
         <form className="grid gap-3 md:grid-cols-2" onSubmit={submitMission}>
           <Field label="Ocorrência"><select required name="ocorrencia_id" className={input}><option value="">Seleccionar</option>{(occurrences.items || []).map(item => <option key={item.id} value={item.id}>#{item.id} · {item.titulo} · {item.prioridade || 'Sem prioridade'}</option>)}</select></Field>
           <Field label="Equipa disponível"><select required name="equipa_id" className={input}><option value="">Seleccionar</option>{teams.filter(team => team.estado === 'disponivel').map(team => <option key={team.id} value={team.id}>{team.nome} · {team.tipo_equipa}</option>)}</select></Field>
@@ -486,11 +495,11 @@ export function CoordenadorWorkspace({ user, onLogout }) {
           <Field label="Data prevista de conclusão"><input required type="datetime-local" name="data_prevista_conclusao" className={input} /></Field>
           <div className="md:col-span-2"><Button type="submit" disabled={busy}>Criar e atribuir</Button></div>
         </form>
+      </Card>}
+      <Card><div className="mb-3 grid gap-2 md:grid-cols-4"><input className={input} placeholder="Pesquisar missão" value={missionFilters.q} onChange={event => setMissionFilters({ ...missionFilters, q: event.target.value })} /><select className={input} value={missionFilters.estado} onChange={event => setMissionFilters({ ...missionFilters, estado: event.target.value })}><option value="">Todos os estados</option>{MISSION_STATES.map(state => <option key={state}>{state}</option>)}</select><select className={input} value={missionFilters.equipa_id} onChange={event => setMissionFilters({ ...missionFilters, equipa_id: event.target.value })}><option value="">Todas as equipas</option>{teams.map(team => <option key={team.id} value={team.id}>{team.nome}</option>)}</select><select className={input} value={missionFilters.ocorrencia_id} onChange={event => setMissionFilters({ ...missionFilters, ocorrencia_id: event.target.value })}><option value="">Todas as ocorrências</option>{occurrences.items.map(item => <option key={item.id} value={item.id}>#{item.id} · {item.titulo}</option>)}</select></div>
+        <Table headers={['ID', 'Ocorrência', 'Prioridade', 'Equipa', 'Estado', 'Atribuição', '']} >{missions.map(mission => <tr key={mission.id}><td className="px-3 py-2">{mission.id}</td><td className="px-3 py-2">{mission.ocorrencia?.titulo}</td><td className="px-3 py-2">{mission.ocorrencia?.prioridade || '—'}</td><td className="px-3 py-2">{mission.equipa?.nome}</td><td className="px-3 py-2">{mission.estado}</td><td className="px-3 py-2">{showDate(mission.data_atribuicao)}</td><td className="px-3 py-2"><button aria-label={`Ver missão ${mission.id}`} className="rounded p-1.5 text-brand hover:bg-light dark:hover:bg-dsidebar" onClick={() => openMission(mission.id)}><Icon name="Eye" size={16} /></button></td></tr>)}</Table>
       </Card>
-      <Card><div className="mb-3 grid gap-2 md:grid-cols-4"><input className={input} placeholder="Pesquisar missão" value={missionFilters.q} onChange={event => setMissionFilters({ ...missionFilters, q: event.target.value })} /><select className={input} value={missionFilters.estado} onChange={event => setMissionFilters({ ...missionFilters, estado: event.target.value })}><option value="">Todos os estados</option>{MISSION_STATES.map(state => <option key={state}>{state}</option>)}</select><select className={input} value={missionFilters.equipa_id} onChange={event => setMissionFilters({ ...missionFilters, equipa_id: event.target.value })}><option value="">Todas as equipas</option>{teams.map(team => <option key={team.id} value={team.id}>{team.nome}</option>)}</select><select className={input} value={missionFilters.ocorrencia_id} onChange={event => setMissionFilters({ ...missionFilters, ocorrencia_id: event.target.value })}><option value="">Todas as ocorrências</option>{occurrences.items.map(item => <option key={item.id} value={item.id}>#{item.id} · {item.titulo}</option>)}</select><button className="rounded bg-brand px-3 py-2 text-white md:col-span-4" onClick={() => loadMissions(missionFilters)}>Pesquisar</button></div>
-        <Table headers={['ID', 'Ocorrência', 'Prioridade', 'Equipa', 'Estado', 'Atribuição', '']} >{missions.map(mission => <tr key={mission.id}><td className="px-3 py-2">{mission.id}</td><td className="px-3 py-2">{mission.ocorrencia?.titulo}</td><td className="px-3 py-2">{mission.ocorrencia?.prioridade || '—'}</td><td className="px-3 py-2">{mission.equipa?.nome}</td><td className="px-3 py-2">{mission.estado}</td><td className="px-3 py-2">{showDate(mission.data_atribuicao)}</td><td className="px-3 py-2"><button className="text-brand underline" onClick={() => openMission(mission.id)}>Detalhe</button></td></tr>)}</Table>
-      </Card>
-      {selectedMission && <Card><div className="flex justify-between"><h3 className="font-semibold">Missão #{selectedMission.id} · {selectedMission.estado}</h3><button className="text-brand underline" onClick={() => setSelectedMission(null)}>Fechar</button></div><p className="mt-2 text-sm">{selectedMission.objectivos}</p><p className="text-sm text-muted">{selectedMission.instrucoes}</p><p className="mt-2 text-sm">Equipa: {selectedMission.equipa?.nome} · {selectedMission.equipa?.estado}</p><p className="text-sm">Membros: {(selectedMission.equipa?.membros || []).map(member => member.nome).join(', ') || '—'}</p>{selectedMission.estado === 'atribuida' && <Field label="Reatribuir equipa"><select className={input} value="" onChange={event => reassignMission(event.target.value)}><option value="">Seleccionar equipa disponível</option>{teams.filter(team => team.estado === 'disponivel' && team.id !== selectedMission.equipa_id).map(team => <option value={team.id} key={team.id}>{team.nome}</option>)}</select></Field>}<div className="mt-3 flex flex-wrap gap-2">{MISSION_STATES.map(state => <button key={state} className="rounded border px-2 py-1 text-xs disabled:opacity-40" disabled={busy || selectedMission.estado === state || ['concluida', 'cancelada'].includes(selectedMission.estado)} onClick={() => actOnMission(`estado:${state}`)}>{state}</button>)}<button className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 disabled:opacity-40" disabled={busy || ['concluida', 'cancelada'].includes(selectedMission.estado)} onClick={() => actOnMission('cancelar')}>Cancelar</button></div><h4 className="mt-4 font-semibold">Histórico</h4>{(selectedMission.historico || []).map(item => <p className="border-b py-2 text-sm" key={item.id}>{item.operacao}: {item.estado_anterior || '—'} → {item.estado_novo || '—'} · {item.utilizador} · {showDate(item.created_at)}</p>)}</Card>}
+      {selectedMission && <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="dialog" aria-modal="true"><Card className="max-h-[85vh] w-full max-w-3xl overflow-y-auto p-5"><div className="flex justify-between"><h3 className="font-semibold">Missão #{selectedMission.id} · {selectedMission.estado}</h3><button className="text-brand underline" onClick={() => setSelectedMission(null)}>Fechar</button></div><p className="mt-2 text-sm">{selectedMission.objectivos}</p><p className="text-sm text-muted">{selectedMission.instrucoes}</p><p className="mt-2 text-sm">Equipa: {selectedMission.equipa?.nome} · {selectedMission.equipa?.estado}</p><p className="text-sm">Membros: {(selectedMission.equipa?.membros || []).map(member => member.nome).join(', ') || '—'}</p>{user.role !== 'administrador' && selectedMission.estado === 'atribuida' && <Field label="Reatribuir equipa"><select className={input} value="" onChange={event => reassignMission(event.target.value)}><option value="">Seleccionar equipa disponível</option>{teams.filter(team => team.estado === 'disponivel' && team.id !== selectedMission.equipa_id).map(team => <option value={team.id} key={team.id}>{team.nome}</option>)}</select></Field>}{user.role !== 'administrador' && <div className="mt-3 flex flex-wrap gap-2">{MISSION_STATES.map(state => <button key={state} className="rounded border px-2 py-1 text-xs disabled:opacity-40" disabled={busy || selectedMission.estado === state || ['concluida', 'cancelada'].includes(selectedMission.estado)} onClick={() => actOnMission(`estado:${state}`)}>{state}</button>)}<button className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 disabled:opacity-40" disabled={busy || ['concluida', 'cancelada'].includes(selectedMission.estado)} onClick={() => actOnMission('cancelar')}>Cancelar</button></div>}<h4 className="mt-4 font-semibold">Histórico</h4>{(selectedMission.historico || []).map(item => <p className="border-b py-2 text-sm" key={item.id}>{item.operacao}: {item.estado_anterior || '—'} → {item.estado_novo || '—'} · {item.utilizador} · {showDate(item.created_at)}</p>)}</Card></div>}
     </div>
   );
 
@@ -540,6 +549,7 @@ export function CoordenadorWorkspace({ user, onLogout }) {
         {tab === 'equipas' && renderTeams()}
         {tab === 'missoes' && renderMissions()}
         {tab === 'alertas' && renderAlerts()}
+        {tab === 'perfil' && <CidadaoPerfil user={user} showIdentity={false} />}
         {tab === 'utilizadores' && user.role === 'administrador' && <GestaoUtilizadores />}
       </div>
     </AuthenticatedLayout>
@@ -547,7 +557,7 @@ export function CoordenadorWorkspace({ user, onLogout }) {
 }
 
 function OccurrenceDetail({ occurrence, onClose }) {
-  return <Card><div className="flex justify-between"><h3 className="font-semibold">Ocorrência #{occurrence.id} · {occurrence.titulo}</h3><button className="text-brand underline" onClick={onClose}>Fechar</button></div><p className="mt-2 text-sm">{occurrence.descricao}</p><p className="text-sm text-muted">{occurrence.tipo} · {occurrence.estado} · {occurrence.prioridade || 'Sem prioridade'} · Origem: {occurrence.origem}</p><h4 className="mt-4 font-semibold">Validações</h4>{(occurrence.validacoes || []).map(item => <p className="py-1 text-sm" key={item.id}>{item.estado} · {item.responsavel} · {item.motivo || item.observacoes || '—'}</p>)}<h4 className="mt-4 font-semibold">Avaliações</h4>{(occurrence.avaliacoes || []).map(item => <p className="py-1 text-sm" key={item.id}>{item.prioridade} · {item.pontuacao_total}/10 · {item.responsavel}</p>)}<h4 className="mt-4 font-semibold">Missões</h4>{(occurrence.missoes || []).map(item => <p className="py-1 text-sm" key={item.id}>#{item.id} · {item.estado} · {item.equipa}</p>)}<h4 className="mt-4 font-semibold">Histórico</h4>{(occurrence.historico || []).map(item => <p className="py-1 text-sm" key={item.id}>{item.estado_anterior || '—'} → {item.estado_novo} · {item.responsavel} · {showDate(item.created_at)}</p>)}</Card>;
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="dialog" aria-modal="true" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><Card className="max-h-[85vh] w-full max-w-2xl overflow-y-auto p-5" onClick={event => event.stopPropagation()}><div className="flex justify-between"><h3 className="font-semibold">Ocorrência #{occurrence.id} · {occurrence.titulo}</h3><button className="text-brand underline" onClick={onClose}>Fechar</button></div><p className="mt-2 text-sm">{occurrence.descricao}</p><p className="text-sm text-muted">{occurrence.tipo} · {occurrence.estado} · {occurrence.prioridade || 'Sem prioridade'} · Origem: {occurrence.origem}</p><h4 className="mt-4 font-semibold">Validações</h4>{(occurrence.validacoes || []).map(item => <p className="py-1 text-sm" key={item.id}>{item.estado} · {item.responsavel} · {item.motivo || item.observacoes || '—'}</p>)}<h4 className="mt-4 font-semibold">Avaliações</h4>{(occurrence.avaliacoes || []).map(item => <p className="py-1 text-sm" key={item.id}>{item.prioridade} · {item.pontuacao_total}/10 · {item.responsavel}</p>)}<h4 className="mt-4 font-semibold">Missões</h4>{(occurrence.missoes || []).map(item => <p className="py-1 text-sm" key={item.id}>#{item.id} · {item.estado} · {item.equipa}</p>)}<h4 className="mt-4 font-semibold">Histórico</h4>{(occurrence.historico || []).map(item => <p className="py-1 text-sm" key={item.id}>{item.estado_anterior || '—'} → {item.estado_novo} · {item.responsavel} · {showDate(item.created_at)}</p>)}</Card></div>;
 }
 
 export default CoordenadorWorkspace;

@@ -33,6 +33,10 @@ export const ocorrenciasService = {
     );
   },
 
+  async atualizarDescricao(id, descricao) {
+    return extractData(await api.patch(`/ocorrencias/${encodeURIComponent(id)}`, { descricao }), data => data && typeof data === 'object');
+  },
+
   async listarTipos() {
     return extractData(
       await api.get('/tipos-ocorrencia'),

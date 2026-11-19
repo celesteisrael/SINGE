@@ -5,7 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 
-export function CidadaoPerfil({ user }) {
+export function CidadaoPerfil({ user, identityStatus, setPage, showIdentity = true }) {
   const { theme, toggleTheme } = useTheme();
   const { updateProfile } = useAuth();
   const toast = useToast();
@@ -42,7 +42,7 @@ export function CidadaoPerfil({ user }) {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      <h1 className="text-2xl font-bold text-ink dark:text-dink">O Meu Perfil</h1>
+      <h1 className="text-2xl font-bold text-ink dark:text-dink">Meu Perfil</h1>
 
       <Card className="p-6">
         <div className="flex items-center gap-4 mb-5">
@@ -85,6 +85,12 @@ export function CidadaoPerfil({ user }) {
           A alteração de palavra-passe e outros dados pessoais não está disponível na API.
         </p>
       </Card>
+
+      {showIdentity && <Card className="p-6">
+        <h3 className="font-semibold text-ink dark:text-dink mb-2">Verificação de identidade</h3>
+        <p className="mb-3 text-sm text-muted">Estado: {identityStatus?.estado || (identityStatus?.elegivel ? 'Aprovada' : 'Pendente')}</p>
+        <Button type="button" onClick={() => setPage?.('verificacao')}>Consultar verificação</Button>
+      </Card>}
 
       <Card className="p-6">
         <h3 className="font-semibold text-ink dark:text-dink mb-3 flex items-center gap-2">

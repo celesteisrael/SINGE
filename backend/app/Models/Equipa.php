@@ -21,6 +21,8 @@ class Equipa extends Model
         'tipo_equipa_id',
         'estado',
         'descricao',
+        'latitude',
+        'longitude',
     ];
 
     protected function casts(): array

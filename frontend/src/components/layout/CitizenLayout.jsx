@@ -5,11 +5,9 @@ const NAVIGATION = [
   { id: 'dashboard', label: 'Início', icon: 'Home' },
   { id: 'comunicar', label: 'Comunicar ocorrência', icon: 'AlertCircle' },
   { id: 'minhas-ocorrencias', label: 'As minhas ocorrências', icon: 'FileText' },
-  { id: 'verificacao', label: 'Verificação de identidade', icon: 'ShieldCheck' },
   { id: 'alertas', label: 'Alertas públicos', icon: 'AlertOctagon' },
-  { id: 'informacoes', label: 'Segurança e recomendações', icon: 'BookOpen' },
   { id: 'notificacoes', label: 'Notificações', icon: 'Bell' },
-  { id: 'perfil', label: 'O meu perfil', icon: 'User' },
+  { id: 'perfil', label: 'Meu Perfil', icon: 'User' },
 ];
 
 export function CitizenLayout({ user, page, setPage, onLogout, availablePages = [], children }) {

@@ -75,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/ocorrencias', [OcorrenciaController::class, 'indexForOperator'])->name('ocorrencias.index');
         Route::post('/ocorrencias', [OcorrenciaController::class, 'storeForOperator'])->name('ocorrencias.store');
         Route::get('/tipos-ocorrencia', [OcorrenciaController::class, 'indexTypesForOperator'])->name('tipos-ocorrencia.index');
+        Route::get('/ocorrencias/{ocorrencia}/sugerir-complementos', [OcorrenciaController::class, 'suggestDescription'])->name('ocorrencias.description-suggestions');
     });
 
     Route::middleware('perfil:Administrador,Coordenador,Operador,Agente,Cidadão')
@@ -89,6 +90,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('perfil:Administrador,Coordenador')->group(function (): void {
         Route::patch('/ocorrencias/{ocorrencia}/estado', [OcorrenciaController::class, 'updateState'])->name('ocorrencias.state');
+    });
+
+    Route::middleware('perfil:Administrador,Coordenador,Operador')->group(function (): void {
         Route::patch('/ocorrencias/{ocorrencia}', [OcorrenciaController::class, 'update'])->name('ocorrencias.update');
     });
 
@@ -143,6 +147,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('perfil:Administrador,Coordenador')->group(function (): void {
         Route::patch('/equipas/{equipa}/disponibilidade', [EquipaController::class, 'updateAvailability'])->name('equipas.availability');
+        Route::patch('/equipas/{equipa}/localizacao', [EquipaController::class, 'updateLocation'])->name('equipas.location');
     });
 
     Route::middleware('perfil:Administrador,Coordenador,Agente')->group(function (): void {

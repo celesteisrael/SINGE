@@ -51,6 +51,9 @@ export const coordenadorService = {
   async teamAvailability(id, estado) {
     return dataOf(await api.patch(`/equipas/${encodeURIComponent(id)}/disponibilidade`, { estado }));
   },
+  async updateTeamLocation(id, latitude, longitude) {
+    return dataOf(await api.patch(`/equipas/${encodeURIComponent(id)}/localizacao`, { latitude, longitude }));
+  },
   async missions(filters = {}) {
     const params = new URLSearchParams(Object.entries(filters)
       .filter(([, value]) => value !== '' && value !== null && value !== undefined)

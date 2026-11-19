@@ -153,7 +153,7 @@ class DemoCoordenadorSeeder extends Seeder
                     $factors = FatorPrioridade::query()->where('ativo', true)->orderBy('id')->get();
                     (new AvaliacaoPrioridadeService)->avaliar([
                         'ocorrencia_id' => $incident->id,
-                        'justificacao' => 'Avaliação de demonstração baseada nos cinco factores oficiais.',
+                        'justificacao' => 'Avaliação de demonstração baseada nos quatro factores oficiais.',
                         'factores' => $factors->map(fn (FatorPrioridade $factor): array => [
                             'fator_prioridade_id' => $factor->id,
                             'pontuacao' => $score,

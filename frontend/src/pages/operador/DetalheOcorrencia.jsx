@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Icon from '../../components/common/Icon';
 import { Card, Button, StatusBadge, Timeline, EmptyState, Field, inputCls } from '../../components/common/CommonComponents';
 import { MozambiqueMap } from '../../components/map/MapComponents';
 import { useToast } from '../../contexts/ToastContext';
 import { ValidationError } from '../../services/api';
 import { validacoesService } from '../../services/validacoesService';
+import { ocorrenciasService } from '../../services/ocorrenciasService';
+import { operadorService } from '../../services/operadorService';
 
 const STATE_LABELS = {
   registada: 'Registada',
@@ -41,6 +43,31 @@ export function DetalheOcorrencia({ o, loading, error, onRefresh, onValidationSa
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [description, setDescription] = useState(o?.descricao || '');
+  const [suggestions, setSuggestions] = useState(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [descriptionSaving, setDescriptionSaving] = useState(false);
+
+  useEffect(() => { setDescription(o?.descricao || ''); setEditingDescription(false); setSuggestions(null); }, [o?.id, o?.descricao]);
+
+  const loadDescriptionSuggestions = async () => {
+    setSuggestionLoading(true);
+    try { setSuggestions(await operadorService.sugerirComplementos(o.id)); }
+    catch (suggestionError) { toast.error(suggestionError.message || 'Não foi possível obter sugestões.'); }
+    finally { setSuggestionLoading(false); }
+  };
+
+  const saveDescription = async () => {
+    setDescriptionSaving(true);
+    try {
+      await ocorrenciasService.atualizarDescricao(o.id, description.trim());
+      await onRefresh?.();
+      setEditingDescription(false);
+      toast.success('Descrição actualizada.');
+    } catch (saveError) { toast.error(saveError.message || 'Não foi possível actualizar a descrição.'); }
+    finally { setDescriptionSaving(false); }
+  };
 
   const submitValidation = async (event) => {
     event.preventDefault();
@@ -148,8 +175,9 @@ export function DetalheOcorrencia({ o, loading, error, onRefresh, onValidationSa
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           <Card className="p-5 space-y-4">
-            <h2 className="font-semibold text-ink dark:text-dink">Descrição e localização</h2>
-            <p className="text-sm text-ink dark:text-dink whitespace-pre-wrap">{o.descricao}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold text-ink dark:text-dink">Descrição e localização</h2><div className="flex gap-2"><Button type="button" variant="secondary" onClick={loadDescriptionSuggestions} disabled={suggestionLoading}>{suggestionLoading ? 'A analisar…' : 'Sugestões da IA'}</Button><Button type="button" variant="secondary" onClick={() => setEditingDescription(value => !value)}>{editingDescription ? 'Cancelar edição' : 'Editar descrição'}</Button></div></div>
+            {editingDescription ? <><textarea aria-label="Descrição da ocorrência" className={inputCls} rows={6} value={description} onChange={event => setDescription(event.target.value)} /><div className="flex justify-end"><Button type="button" onClick={saveDescription} disabled={descriptionSaving || !description.trim()}>{descriptionSaving ? 'A guardar…' : 'Guardar descrição'}</Button></div></> : <p className="text-sm text-ink dark:text-dink whitespace-pre-wrap">{o.descricao}</p>}
+            {suggestions && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950/30"><h3 className="text-sm font-semibold">Complementos sugeridos com base em duplicados</h3><p className="my-2 text-xs text-muted">{suggestions.aviso}</p>{suggestions.sugestoes?.length ? suggestions.sugestoes.map((item, index) => <article key={`${item.relatos_ids.join('-')}-${index}`} className="border-t border-blue-200 py-2 dark:border-blue-900"><p className="text-sm">{item.texto}</p><p className="mt-1 text-xs text-muted">Relatos #{item.relatos_ids.join(', #')} · {item.justificacao}</p><Button type="button" size="sm" className="mt-2" onClick={() => { setDescription(current => `${current.trim()}${current.trim() ? '\n\n' : ''}${item.texto}`); setEditingDescription(true); }}>Adicionar ao rascunho</Button></article>) : <p className="text-sm">Sem complementos adicionais.</p>}</div>}
             <p className="text-sm text-muted dark:text-dmuted">
               {[o.localizacao, location.endereco_referencia, location.distrito, location.provincia].filter(Boolean).join(', ') || 'Localização não disponível'}
             </p>

@@ -19,9 +19,18 @@ use App\Services\Ocorrencias\DeteccaoDuplicadosService;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 use App\Services\Ocorrencias\AnaliseSemanticaDuplicadosService;
+use App\Services\Ocorrencias\SugestaoComplementoDuplicadosService;
 
 class OcorrenciaController extends SingeApiController
 {
+    public function suggestDescription(Ocorrencia $ocorrencia, SugestaoComplementoDuplicadosService $service): JsonResponse
+    {
+        return $this->execute(
+            fn (): array => $service->sugerir($ocorrencia),
+            'Sugestões de complemento consultadas com sucesso.',
+        );
+    }
+
     public function indexForOperator(
         IndexOperadorOcorrenciasRequest $request,
         OcorrenciaService $service,

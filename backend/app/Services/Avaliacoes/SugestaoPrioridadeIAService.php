@@ -4,6 +4,8 @@ namespace App\Services\Avaliacoes;
 
 use App\Models\FatorPrioridade;
 use App\Models\Ocorrencia;
+use App\Models\Equipa;
+use App\Enums\EstadoEquipa;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -45,6 +47,18 @@ class SugestaoPrioridadeIAService
             $fatores = app(AvaliacaoPrioridadeService::class)
                 ->listarFatoresAtivos();
 
+            $equipasDisponiveis = Equipa::query()
+                ->with('tipoEquipa')
+                ->where('estado', EstadoEquipa::DISPONIVEL->value)
+                ->get()
+                ->groupBy(fn (Equipa $equipa): string => (string) ($equipa->tipoEquipa?->nome ?? 'Sem tipo'))
+                ->map(fn ($equipas, string $tipo): array => [
+                    'tipo' => $tipo,
+                    'quantidade' => $equipas->count(),
+                ])
+                ->values()
+                ->all();
+
             // Enviar apenas informação operacional.
             // Dados pessoais do comunicante e do utilizador são excluídos.
             $dados = [
@@ -56,8 +70,6 @@ class SugestaoPrioridadeIAService
                     'provincia' => $ocorrencia->localizacaoGeografica?->provincia?->nome,
                     'distrito' => $ocorrencia->localizacaoGeografica?->distrito?->nome,
                     'municipio' => $ocorrencia->localizacaoGeografica?->municipio?->nome,
-                    'latitude' => $ocorrencia->latitude,
-                    'longitude' => $ocorrencia->longitude,
                     'data_ocorrencia' => $ocorrencia->data_ocorrencia?->toIso8601String(),
                 ],
                 'fatores' => $fatores->map(fn (FatorPrioridade $fator): array => [
@@ -66,6 +78,7 @@ class SugestaoPrioridadeIAService
                     'descricao' => $fator->descricao,
                     'peso' => (float) $fator->peso,
                 ])->all(),
+                'equipas_disponiveis' => $equipasDisponiveis,
             ];
 
             $conteudo = json_encode(
@@ -100,7 +113,9 @@ REGRAS OBRIGATÓRIAS:
 - Não inventes número de pessoas afectadas, vítimas, crianças, idosos, pessoas vulneráveis, recursos disponíveis ou em falta.
 - Não deduzas que existem vítimas ou risco iminente de morte sem evidência explícita.
 - Não confundas a gravidade do tipo de ocorrência com a gravidade concreta desta ocorrência.
-- Considera a localização apenas com base na informação fornecida.
+- A localização não é um factor de prioridade e não deve influenciar nenhuma pontuação.
+- Para "escassez de recursos", considera apenas a quantidade de equipas actualmente disponíveis, apresentada por tipo. Usa apenas equipas do tipo compatível com a ocorrência; estados em missão ou indisponível não contam como recursos disponíveis. Se não houver tipo compatível disponível, considera a escassez elevada. Não assumes recursos além das equipas indicadas.
+- Para "vulnerabilidade", avalia se os factos descritos podem evoluir para feridos ou mortes com o passar do tempo; distingue risco plausível de vítimas já confirmadas e explica a incerteza.
 - Para cada factor, indica se existem dados suficientes.
 - Se não existirem dados suficientes, coloca pontuacao como null e explica o que falta.
 - Quando existirem dados suficientes, atribui uma pontuação entre 0 e 10.

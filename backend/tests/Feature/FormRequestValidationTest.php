@@ -309,11 +309,10 @@ it('validates priority assessments and rejects client-supplied actor identity', 
     $user = User::factory()->create();
     $priority = Prioridade::create(['nome' => 'Alta', 'nivel' => 1]);
     $factors = [
-        FatorPrioridade::create(['nome' => 'Gravidade', 'peso' => 0.30, 'ativo' => true]),
-        FatorPrioridade::create(['nome' => 'Pessoas afectadas', 'peso' => 0.25, 'ativo' => true]),
-        FatorPrioridade::create(['nome' => 'Vulnerabilidade', 'peso' => 0.20, 'ativo' => true]),
-        FatorPrioridade::create(['nome' => 'Localização', 'peso' => 0.15, 'ativo' => true]),
-        FatorPrioridade::create(['nome' => 'Escassez de recursos', 'peso' => 0.10, 'ativo' => true]),
+        FatorPrioridade::create(['nome' => 'Gravidade', 'peso' => 0.35, 'ativo' => true]),
+        FatorPrioridade::create(['nome' => 'Pessoas afectadas', 'peso' => 0.29, 'ativo' => true]),
+        FatorPrioridade::create(['nome' => 'Vulnerabilidade', 'peso' => 0.24, 'ativo' => true]),
+        FatorPrioridade::create(['nome' => 'Escassez de recursos', 'peso' => 0.12, 'ativo' => true]),
     ];
     $valid = [
         'ocorrencia_id' => 1,

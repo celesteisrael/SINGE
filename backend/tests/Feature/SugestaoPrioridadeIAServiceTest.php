@@ -1,10 +1,13 @@
 <?php
 
 use App\Enums\EstadoOcorrencia;
+use App\Enums\EstadoEquipa;
+use App\Models\Equipa;
 use App\Models\FatorPrioridade;
 use App\Models\Ocorrencia;
 use App\Models\Prioridade;
 use App\Models\TipoOcorrencia;
+use App\Models\TipoEquipa;
 use App\Models\User;
 use App\Services\Avaliacoes\SugestaoPrioridadeIAService;
 use Illuminate\Support\Facades\Http;
@@ -42,13 +45,15 @@ it('requests priority suggestions from the configured OpenAI model', function ()
         'utilizador_id' => $user->id,
         'estado' => EstadoOcorrencia::REGISTADA,
     ]);
+    $teamType = TipoEquipa::query()->create(['nome' => 'Incêndio', 'ativo' => true]);
+    Equipa::query()->create(['nome' => 'Equipa disponível', 'tipo_equipa_id' => $teamType->id, 'estado' => EstadoEquipa::DISPONIVEL]);
+    Equipa::query()->create(['nome' => 'Equipa ocupada', 'tipo_equipa_id' => $teamType->id, 'estado' => EstadoEquipa::EM_MISSAO]);
 
     $factors = [
-        ['Gravidade', 0.30],
-        ['Pessoas afectadas', 0.25],
-        ['Vulnerabilidade', 0.20],
-        ['Localização', 0.15],
-        ['Escassez de recursos', 0.10],
+        ['Gravidade', 0.35],
+        ['Pessoas afectadas', 0.29],
+        ['Vulnerabilidade', 0.24],
+        ['Escassez de recursos', 0.12],
     ];
     $factors = collect($factors)->map(
         fn (array $factor): FatorPrioridade => FatorPrioridade::query()->create([
@@ -86,6 +91,7 @@ it('requests priority suggestions from the configured OpenAI model', function ()
 
     Http::assertSent(function ($request) use ($occurrence) {
         $payload = $request->data();
+        $data = json_decode($payload['messages'][1]['content'], true);
 
         return $request->url() === 'https://api.openai.test/v1/chat/completions'
             && $request->hasHeader('Authorization', 'Bearer test-api-key')
@@ -93,6 +99,9 @@ it('requests priority suggestions from the configured OpenAI model', function ()
             && $payload['reasoning_effort'] === 'none'
             && $payload['max_completion_tokens'] === 6000
             && $payload['response_format'] === ['type' => 'json_object']
-            && str_contains($payload['messages'][1]['content'], $occurrence->titulo);
+            && str_contains($payload['messages'][1]['content'], $occurrence->titulo)
+            && $data['equipas_disponiveis'] === [['tipo' => 'Incêndio', 'quantidade' => 1]]
+            && count($data['fatores']) === 4
+            && ! collect($data['fatores'])->contains(fn (array $factor): bool => $factor['nome'] === 'Localização');
     });
 });

@@ -33,6 +33,9 @@ export const operadorService = {
     }
     return response.data;
   },
+  async sugerirComplementos(id) {
+    return extractData(await api.get(`/operador/ocorrencias/${encodeURIComponent(id)}/sugerir-complementos`), data => data && typeof data === 'object');
+  },
 };
 
 export default operadorService;

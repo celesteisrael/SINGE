@@ -20,6 +20,8 @@ class MissaoService
 {
     private const PERFIS_GESTAO = ['Administrador', 'Coordenador'];
 
+    private const PERFIS_ATRIBUICAO = ['Coordenador'];
+
     /** @param array<string, mixed> $dados */
     public function criar(array $dados, User $utilizador): Missao
     {
@@ -342,8 +344,8 @@ class MissaoService
 
     private function autorizarGestao(User $utilizador): void
     {
-        if (! in_array($this->nomePerfil($utilizador), self::PERFIS_GESTAO, true)) {
-            throw new AuthorizationException('O perfil do utilizador não pode atribuir ou reatribuir missões.');
+        if (! in_array($this->nomePerfil($utilizador), self::PERFIS_ATRIBUICAO, true)) {
+            throw new AuthorizationException('O perfil do utilizador não pode criar ou atribuir missões.');
         }
     }
 
