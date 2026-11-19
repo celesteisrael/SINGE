@@ -1,269 +1,362 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
-
-// Layouts
-import { InstitutionalLayout } from './components/layout/InstitutionalLayout';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CitizenLayout } from './components/layout/CitizenLayout';
-
-// Public Pages
 import { Login } from './pages/public/Login';
-
-// Common Components
 import { EmptyState } from './components/common/CommonComponents';
-
-// Operador Pages
-import { OperadorDashboard } from './pages/operador/OperadorDashboard';
-import { OperadorOcorrencias } from './pages/operador/OperadorOcorrencias';
-import { RegistarOcorrencia } from './pages/operador/RegistarOcorrencia';
-import { DetalheOcorrencia } from './pages/operador/DetalheOcorrencia';
-
-// Coordenador Pages
-import { CoordenadorDashboard } from './pages/coordenador/CoordenadorDashboard';
-import { Prioridades } from './pages/coordenador/Prioridades';
-import { Equipas } from './pages/coordenador/Equipas';
-import { DetalheEquipa } from './pages/coordenador/DetalheEquipa';
-import { Missoes } from './pages/coordenador/Missoes';
-import { DetalheMissaoCoord } from './pages/coordenador/DetalheMissaoCoord';
-
-// Agente Pages
-import { AgenteDashboard } from './pages/agente/AgenteDashboard';
-import { MinhasMissoes } from './pages/agente/MinhasMissoes';
-import { DetalheMissao } from './pages/agente/DetalheMissao';
-import { ActualizarEstado } from './pages/agente/ActualizarEstado';
-
-// Administrador Pages
-import { GestaoUtilizadores } from './pages/admin/GestaoUtilizadores';
-import { AdminDashboard } from './pages/admin/AdminDashboard';
-import { ParametrosSistema } from './pages/admin/ParametrosSistema';
-import { AuditoriaLogs } from './pages/admin/AuditoriaLogs';
-
-// Shared Pages
-import { Relatorios } from './pages/shared/Relatorios';
-import { Notificacoes } from './pages/shared/Notificacoes';
-import { HistoricoSistema } from './pages/shared/HistoricoSistema';
-import { Definicoes } from './pages/shared/Definicoes';
-
-// Cidadão Pages
-import { CidadaoDashboard } from './pages/cidadao/CidadaoDashboard';
-import { CidadaoComunicar } from './pages/cidadao/CidadaoComunicar';
-import { CidadaoMinhasOcorrencias } from './pages/cidadao/CidadaoMinhasOcorrencias';
-import { CidadaoDetalheOcorrencia } from './pages/cidadao/CidadaoDetalheOcorrencia';
-import { CidadaoAlertas } from './pages/cidadao/CidadaoAlertas';
-import { CidadaoDetalheAlerta } from './pages/cidadao/CidadaoDetalheAlerta';
-import { CidadaoInformacoes } from './pages/cidadao/CidadaoInformacoes';
-import { CidadaoDetalheInfo } from './pages/cidadao/CidadaoDetalheInfo';
-import { CidadaoPerfil } from './pages/cidadao/CidadaoPerfil';
-import { CidadaoNotificacoes } from './pages/cidadao/CidadaoNotificacoes';
-
-// Mock Data
-import { OCORRENCIAS, USERS } from './data/mockData';
+import { notificacoesService } from './services/notificacoesService';
 import { ocorrenciasService } from './services/ocorrenciasService';
+import { evidenciasService } from './services/evidenciasService';
+import { alertasPublicosService } from './services/alertasPublicosService';
+import { useTheme } from './contexts/ThemeContext';
+import { identidadeService } from './services/identidadeService';
+
+const namedPage = (load, name) => lazy(() => load().then(module => ({ default: module[name] })));
+const CidadaoDashboard = namedPage(() => import('./pages/cidadao/CidadaoDashboard'), 'CidadaoDashboard');
+const CidadaoPerfil = namedPage(() => import('./pages/cidadao/CidadaoPerfil'), 'CidadaoPerfil');
+const CidadaoNotificacoes = namedPage(() => import('./pages/cidadao/CidadaoNotificacoes'), 'CidadaoNotificacoes');
+const CidadaoComunicar = namedPage(() => import('./pages/cidadao/CidadaoComunicar'), 'CidadaoComunicar');
+const CidadaoMinhasOcorrencias = namedPage(() => import('./pages/cidadao/CidadaoMinhasOcorrencias'), 'CidadaoMinhasOcorrencias');
+const CidadaoDetalheOcorrencia = namedPage(() => import('./pages/cidadao/CidadaoDetalheOcorrencia'), 'CidadaoDetalheOcorrencia');
+const CidadaoAlertas = namedPage(() => import('./pages/cidadao/CidadaoAlertas'), 'CidadaoAlertas');
+const CidadaoInformacoes = namedPage(() => import('./pages/cidadao/CidadaoInformacoes'), 'CidadaoInformacoes');
+const CidadaoDetalheAlerta = namedPage(() => import('./pages/cidadao/CidadaoDetalheAlerta'), 'CidadaoDetalheAlerta');
+const CidadaoVerificacao = namedPage(() => import('./pages/cidadao/CidadaoVerificacao'), 'CidadaoVerificacao');
+const OperadorWorkspace = namedPage(() => import('./pages/operador/OperadorWorkspace'), 'OperadorWorkspace');
+const CoordenadorWorkspace = namedPage(() => import('./pages/coordenador/CoordenadorWorkspace'), 'CoordenadorWorkspace');
+const AgenteWorkspace = namedPage(() => import('./pages/agente/AgenteWorkspace'), 'AgenteWorkspace');
+
+const EMPTY_OCCURRENCES = {
+  items: [],
+  pagination: { current_page: 1, per_page: 20, last_page: 1, total: 0 },
+  estatisticas: { total: 0, em_acompanhamento: 0, resolvidas: 0 },
+};
 
 function MainApp() {
-  const [role, setRole] = useState(null);
+  const { user, loading, authError, logout } = useAuth();
+  const { setAccountId } = useTheme();
   const [page, setPage] = useState('dashboard');
-  const [selOc, setSelOc] = useState(null);
-  const [selMs, setSelMs] = useState(null);
-  const [selEq, setSelEq] = useState(null);
-  const [selAlerta, setSelAlerta] = useState(null);
-  const [selInfo, setSelInfo] = useState(null);
-    const [ocorrencias, setOcorrencias] = useState(OCORRENCIAS);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState('');
+  const [occurrences, setOccurrences] = useState(EMPTY_OCCURRENCES);
+  const [occurrencesLoading, setOccurrencesLoading] = useState(false);
+  const [occurrencesError, setOccurrencesError] = useState('');
+  const [occurrenceFilters, setOccurrenceFilters] = useState({
+    estado: '',
+    tipo_ocorrencia_id: '',
+    page: 1,
+  });
+  const [occurrenceTypes, setOccurrenceTypes] = useState([]);
+  const [typesError, setTypesError] = useState('');
+  const [selectedOccurrenceId, setSelectedOccurrenceId] = useState(null);
+  const [selectedOccurrence, setSelectedOccurrence] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [publicAlerts, setPublicAlerts] = useState([]);
+  const [publicAlertsLoading, setPublicAlertsLoading] = useState(false);
+  const [publicAlertsError, setPublicAlertsError] = useState('');
+  const [selectedAlert, setSelectedAlert] = useState(null);
+  const [selectedAlertLoading, setSelectedAlertLoading] = useState(false);
+  const [selectedAlertError, setSelectedAlertError] = useState('');
+  const [identityStatus, setIdentityStatus] = useState(null);
+  const [identityError, setIdentityError] = useState('');
 
-  React.useEffect(() => {
-    let isMounted = true;
-    ocorrenciasService.listar()
-      .then(res => {
-        if (isMounted && Array.isArray(res) && res.length > 0) {
-          setOcorrencias(res);
-        }
-      })
-      .catch(() => {});
-    return () => { isMounted = false; };
+  useLayoutEffect(() => { setAccountId(user?.id ?? null); }, [user?.id, setAccountId]);
+
+  const refreshPublicAlerts = useCallback(async () => {
+    setPublicAlertsLoading(true);
+    setPublicAlertsError('');
+    try {
+      setPublicAlerts(await alertasPublicosService.listar());
+    } catch (error) {
+      setPublicAlertsError(error.message || 'Não foi possível carregar os alertas publicados.');
+    } finally {
+      setPublicAlertsLoading(false);
+    }
   }, []);
 
-  const handleOcorrenciaCriada = (nova) => {
-    if (nova) {
-      setOcorrencias(prev => [nova, ...prev]);
+  const refreshNotifications = useCallback(async () => {
+    setNotificationsLoading(true);
+    setNotificationsError('');
+    try {
+      setNotifications(await notificacoesService.listar());
+    } catch (error) {
+      setNotificationsError(error.message || 'Não foi possível carregar as notificações.');
+    } finally {
+      setNotificationsLoading(false);
     }
-  };
+  }, []);
 
-  // [RF03] Guarda de rotas mínima por perfil RBAC
-  const ALLOWED_PAGES_BY_ROLE = {
-    cidadao: ['dashboard', 'comunicar', 'minhas-ocorrencias', 'detalhe-cidadao', 'alertas', 'detalhe-alerta', 'informacoes', 'detalhe-info', 'notificacoes', 'perfil'],
-    operador: ['dashboard', 'ocorrencias', 'registar', 'detalhe-oc', 'notificacoes', 'relatorios', 'definicoes'],
-    coordenador: ['dashboard', 'ocorrencias', 'detalhe-oc', 'prioridades', 'equipas', 'detalhe-eq', 'missoes', 'detalhe-ms-coord', 'relatorios', 'historico', 'notificacoes', 'definicoes'],
-    agente: ['dashboard', 'missoes', 'detalhe-ms', 'atualizar', 'notificacoes', 'definicoes'],
-    administrador: ['dashboard', 'utilizadores', 'parametros', 'auditoria', 'definicoes'],
-  };
+  const refreshOccurrences = useCallback(async (filters = occurrenceFilters) => {
+    setOccurrencesLoading(true);
+    setOccurrencesError('');
+    try {
+      setOccurrences(await ocorrenciasService.listar(filters));
+    } catch (error) {
+      setOccurrencesError(error.message || 'Não foi possível carregar as ocorrências.');
+    } finally {
+      setOccurrencesLoading(false);
+    }
+  }, [occurrenceFilters]);
 
-  const handleLogin = (r) => {
-    setRole(r);
-    setPage('dashboard');
-  };
+  const refreshDetail = useCallback(async (id = selectedOccurrenceId) => {
+    if (!id) return;
+    setDetailLoading(true);
+    setDetailError('');
+    try {
+      setSelectedOccurrence(await ocorrenciasService.obterPorId(id));
+    } catch (error) {
+      setSelectedOccurrence(null);
+      setDetailError(error.message || 'Não foi possível carregar a ocorrência.');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [selectedOccurrenceId]);
 
-  const handleLogout = () => {
-    setRole(null);
-    setPage('dashboard');
-    setSelOc(null);
-    setSelMs(null);
-    setSelEq(null);
-    setSelAlerta(null);
-    setSelInfo(null);
-  };
+  const markNotificationAsRead = useCallback(async (id) => {
+    const updatedNotification = await notificacoesService.marcarComoLida(id);
+    setNotifications(current => current.map(notification => (
+      notification.id === updatedNotification.id
+        ? { ...notification, ...updatedNotification }
+        : notification
+    )));
+  }, []);
 
-  // Se não houver perfil selecionado, exibe ecrã de Login
-  if (!role) {
-    return <Login onLogin={handleLogin} />;
+  useEffect(() => {
+    if (user?.role === 'cidadao') {
+      refreshNotifications();
+      refreshPublicAlerts();
+      identidadeService.minha()
+        .then(result => { setIdentityStatus(result); setIdentityError(''); })
+        .catch(error => { setIdentityStatus(null); setIdentityError(error.message || 'Estado de identidade indisponível.'); });
+      ocorrenciasService.listarTipos()
+        .then(setOccurrenceTypes)
+        .catch(error => setTypesError(error.message || 'Não foi possível carregar os tipos de ocorrência.'));
+    } else {
+      setNotifications([]);
+      setNotificationsError('');
+      setOccurrenceTypes([]);
+      setTypesError('');
+      setIdentityStatus(null);
+      setIdentityError('');
+    }
+  }, [user?.id, user?.role, refreshNotifications, refreshPublicAlerts]);
+
+  useEffect(() => {
+    if (user?.role !== 'cidadao' || page !== 'detalhe-alerta' || !selectedAlert?.id) return;
+    let active = true;
+    setSelectedAlertLoading(true);
+    setSelectedAlertError('');
+    alertasPublicosService.obter(selectedAlert.id)
+      .then(alert => { if (active) setSelectedAlert(alert); })
+      .catch(error => { if (active) setSelectedAlertError(error.message || 'Não foi possível consultar o alerta.'); })
+      .finally(() => { if (active) setSelectedAlertLoading(false); });
+    return () => { active = false; };
+  }, [user?.role, page, selectedAlert?.id]);
+
+  useEffect(() => {
+    if (user?.role !== 'cidadao') return;
+    if (page === 'dashboard' || page === 'minhas-ocorrencias') {
+      refreshOccurrences(page === 'dashboard' ? { page: 1, per_page: 5 } : occurrenceFilters);
+    }
+  }, [user?.id, user?.role, page, occurrenceFilters, refreshOccurrences]);
+
+  useEffect(() => {
+    if (user?.role === 'cidadao' && page === 'detalhe-cidadao' && selectedOccurrenceId) {
+      refreshDetail(selectedOccurrenceId);
+    }
+  }, [user?.role, page, selectedOccurrenceId, refreshDetail]);
+
+  const handleIdentityEligibility = useCallback(eligible => {
+    setIdentityStatus(current => ({ ...(current || {}), elegivel: eligible, estado: eligible ? 'APROVADA' : current?.estado }));
+  }, []);
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-muted">A validar sessão…</div>;
   }
 
-  // CIDADÃO — Layout Superior (Top Nav)
-  if (role === 'cidadao') {
-    const renderCitizen = () => {
-    // [RF03] Guarda de rotas para cidadão
-    if (!ALLOWED_PAGES_BY_ROLE.cidadao.includes(page)) {
-      return <EmptyState icon="Lock" title="Acesso não autorizado" description="O perfil Cidadão não tem autorização para aceder a esta funcionalidade." />;
-    }
-      switch (page) {
-        case 'dashboard':
-          return <CidadaoDashboard setPage={setPage} setSelectedOc={setSelOc} />;
-        case 'comunicar':
-          return <CidadaoComunicar setPage={setPage} onOcorrenciaCriada={handleOcorrenciaCriada} />;
-        case 'minhas-ocorrencias':
-          return <CidadaoMinhasOcorrencias setPage={setPage} setSelectedOc={setSelOc} ocorrencias={ocorrencias} />;
-        case 'detalhe-cidadao':
-          return <CidadaoDetalheOcorrencia o={selOc} setPage={setPage} />;
-        case 'alertas':
-          return <CidadaoAlertas setPage={setPage} setSelectedAlerta={setSelAlerta} />;
-        case 'detalhe-alerta':
-          return <CidadaoDetalheAlerta a={selAlerta} setPage={setPage} />;
-        case 'informacoes':
-          return <CidadaoInformacoes setPage={setPage} setSelectedInfo={setSelInfo} />;
-        case 'detalhe-info':
-          return <CidadaoDetalheInfo info={selInfo} setPage={setPage} />;
-        case 'notificacoes':
-          return <CidadaoNotificacoes setPage={setPage} />;
-        case 'perfil':
-          return <CidadaoPerfil user={USERS.cidadao} />;
-        default:
-          return <EmptyState icon="Construction" title="Em construção" />;
-      }
-    };
+  if (!user) return <Login authError={authError} />;
 
+  const handleLogout = async () => {
+    await logout();
+    setPage('dashboard');
+    setSelectedOccurrenceId(null);
+    setSelectedOccurrence(null);
+  };
+
+  if (user.role === 'operador') {
+    return <Suspense fallback={<div className="min-h-screen grid place-items-center bg-light text-muted dark:bg-dbg dark:text-dmuted">A carregar o painel…</div>}><OperadorWorkspace user={user} onLogout={handleLogout} /></Suspense>;
+  }
+
+  if (user.role === 'agente') {
+    return <Suspense fallback={<div className="min-h-screen grid place-items-center bg-light text-muted dark:bg-dbg dark:text-dmuted">A carregar o painel…</div>}><AgenteWorkspace user={user} onLogout={handleLogout} /></Suspense>;
+  }
+
+  if (user.role === 'coordenador' || user.role === 'administrador') {
+    return <Suspense fallback={<div className="min-h-screen grid place-items-center bg-light text-muted dark:bg-dbg dark:text-dmuted">A carregar o painel…</div>}><CoordenadorWorkspace user={user} onLogout={handleLogout} /></Suspense>;
+  }
+
+  if (user.role !== 'cidadao') {
     return (
-      <CitizenLayout user={USERS.cidadao} page={page} setPage={setPage} onLogout={handleLogout}>
-        {renderCitizen()}
-      </CitizenLayout>
+      <div className="min-h-screen flex items-center justify-center bg-light dark:bg-dbg p-6">
+        <div className="max-w-lg rounded-xl bg-white dark:bg-dcard p-8 text-center shadow">
+          <h1 className="text-xl font-bold text-ink dark:text-dink">Perfil autenticado: {user.roleTitle}</h1>
+          <p className="mt-3 text-sm text-muted dark:text-dmuted">
+            A integração disponível nesta etapa é apenas para o perfil Cidadão. Este perfil não tem acesso ao painel Cidadão.
+          </p>
+          <button onClick={handleLogout} className="mt-6 rounded-lg bg-brand px-4 py-2 text-white">
+            Terminar sessão
+          </button>
+        </div>
+      </div>
     );
   }
 
-  // INSTITUCIONAL — Layout Lateral (Sidebar Navy)
-  const renderInstitutional = () => {
-    // [RF03] Guarda de rotas institucionais
-    if (role && ALLOWED_PAGES_BY_ROLE[role] && !ALLOWED_PAGES_BY_ROLE[role].includes(page)) {
-      return <EmptyState icon="Lock" title="Acesso não autorizado" description="O seu perfil não tem autorização para aceder a esta funcionalidade." />;
-    }
-    if (role === 'operador') {
-      switch (page) {
-        case 'dashboard':
-          return <OperadorDashboard setPage={setPage} setSelected={setSelOc} ocorrencias={ocorrencias} />;
-        case 'ocorrencias':
-          return <OperadorOcorrencias setPage={setPage} setSelected={setSelOc} ocorrencias={ocorrencias} />;
-        case 'registar':
-          return <RegistarOcorrencia setPage={setPage} onOcorrenciaCriada={handleOcorrenciaCriada} />;
-        case 'detalhe-oc':
-          return <DetalheOcorrencia o={selOc} setPage={setPage} role={role} />;
-        case 'notificacoes':
-          return <Notificacoes />;
-        case 'relatorios':
-          return <Relatorios />;
-        case 'definicoes':
-          return <Definicoes user={USERS[role]} role={role} />;
-        default:
-          return <EmptyState icon="Construction" title="Em construção" />;
-      }
-    }
+  const unreadNotifications = notifications.filter(notification => !notification.lida).length;
+  const updateOccurrenceFilters = (changes) => {
+    setOccurrenceFilters(current => ({ ...current, ...changes, page: changes.page ?? 1 }));
+  };
 
-    if (role === 'coordenador') {
-      switch (page) {
-        case 'dashboard':
-          return <CoordenadorDashboard setPage={setPage} ocorrencias={ocorrencias} />;
-        case 'ocorrencias':
-          return <OperadorOcorrencias setPage={setPage} setSelected={setSelOc} ocorrencias={ocorrencias} />;
-        case 'detalhe-oc':
-          return <DetalheOcorrencia o={selOc} setPage={setPage} role={role} />;
-        case 'prioridades':
-          return <Prioridades ocorrencias={ocorrencias} setPage={setPage} setSelected={setSelOc} />;
-        case 'equipas':
-          return <Equipas setPage={setPage} setSelectedEquipa={setSelEq} />;
-        case 'detalhe-eq':
-          return <DetalheEquipa e={selEq} setPage={setPage} />;
-        case 'missoes':
-          return <Missoes setPage={setPage} setSelectedMissao={setSelMs} />;
-        case 'detalhe-ms-coord':
-          return <DetalheMissaoCoord m={selMs} setPage={setPage} />;
-        case 'relatorios':
-          return <Relatorios />;
-        case 'historico':
-          return <HistoricoSistema />;
-        case 'notificacoes':
-          return <Notificacoes />;
-        case 'definicoes':
-          return <Definicoes user={USERS[role]} role={role} />;
-        default:
-          return <EmptyState icon="Construction" title="Em construção" />;
-      }
-    }
+  const handleOccurrenceCreated = async (occurrence) => {
+    setOccurrenceFilters({ estado: '', tipo_ocorrencia_id: '', page: 1 });
+    await refreshOccurrences({ page: 1, per_page: 5 });
+    setSelectedOccurrenceId(occurrence.id);
+  };
 
-    if (role === 'agente') {
-      switch (page) {
-        case 'dashboard':
-          return <AgenteDashboard setPage={setPage} setSelectedMissao={setSelMs} />;
-        case 'missoes':
-          return <MinhasMissoes setPage={setPage} setSelectedMissao={setSelMs} />;
-        case 'detalhe-ms':
-          return <DetalheMissao m={selMs} setPage={setPage} />;
-        case 'atualizar':
-          return <ActualizarEstado m={selMs} setPage={setPage} />;
-        case 'notificacoes':
-          return <Notificacoes />;
-        case 'definicoes':
-          return <Definicoes user={USERS[role]} role={role} />;
-        default:
-          return <EmptyState icon="Construction" title="Em construção" />;
-      }
-    }
+  const handleEvidenceUploaded = async () => {
+    await refreshDetail(selectedOccurrenceId);
+  };
 
-        if (role === 'administrador') {
-      switch (page) {
-        case 'dashboard':
-          return <AdminDashboard setPage={setPage} />;
-        case 'utilizadores':
-          return <GestaoUtilizadores />;
-        case 'parametros':
-          return <ParametrosSistema />;
-        case 'auditoria':
-          return <AuditoriaLogs />;
-        case 'definicoes':
-          return <Definicoes user={USERS[role]} role={role} />;
-        default:
-          return <EmptyState icon="Construction" title="Em construção" />;
-      }
-    }
-
-    return null;
+  const downloadEvidence = async (evidence) => {
+    const file = await evidenciasService.descarregar(evidence.id);
+    const url = URL.createObjectURL(file);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = evidence.nome_ficheiro;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
-    <InstitutionalLayout
-      role={role}
-      user={USERS[role]}
+    <Suspense fallback={<div className="min-h-screen grid place-items-center bg-light text-muted dark:bg-dbg dark:text-dmuted">A carregar a página…</div>}><CitizenLayout
+      user={user}
       page={page}
       setPage={setPage}
       onLogout={handleLogout}
+      availablePages={['dashboard', 'comunicar', 'minhas-ocorrencias', 'perfil', 'verificacao', 'notificacoes', 'alertas', 'informacoes', 'detalhe-alerta']}
+      notifications={notifications}
+      notificationsLoading={notificationsLoading}
+      notificationsError={notificationsError}
+      onRefreshNotifications={refreshNotifications}
+      onMarkNotificationAsRead={markNotificationAsRead}
     >
-      {renderInstitutional()}
-    </InstitutionalLayout>
+      {page === 'perfil' ? (
+        <CidadaoPerfil user={user} />
+      ) : page === 'verificacao' ? (
+        <CidadaoVerificacao onEligibilityChange={handleIdentityEligibility} />
+      ) : page === 'notificacoes' ? (
+        <CidadaoNotificacoes
+          notifications={notifications}
+          loading={notificationsLoading}
+          error={notificationsError}
+          onRefresh={refreshNotifications}
+          onMarkAsRead={markNotificationAsRead}
+        />
+      ) : page === 'comunicar' ? (
+        identityStatus?.elegivel ? (
+        <CidadaoComunicar
+          user={user}
+          types={occurrenceTypes}
+          typesError={typesError}
+          onCreated={handleOccurrenceCreated}
+          setPage={setPage}
+        />
+        ) : (
+          <div className="mx-auto max-w-2xl rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+            <h1 className="text-lg font-semibold">Verificação necessária</h1>
+            <p className="mt-2 text-sm">{identityError || 'Para comunicar uma ocorrência através da sua conta, submeta um documento e aguarde a aprovação da identidade.'} Em situações urgentes, o Operador pode registar a ocorrência pelo canal institucional.</p>
+            <button className="mt-4 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white" onClick={() => setPage('verificacao')}>Verificar identidade</button>
+          </div>
+        )
+      ) : page === 'minhas-ocorrencias' ? (
+        <CidadaoMinhasOcorrencias
+          ocorrencias={occurrences.items}
+          pagination={occurrences.pagination}
+          filters={occurrenceFilters}
+          types={occurrenceTypes}
+          loading={occurrencesLoading}
+          error={occurrencesError}
+          onRefresh={() => refreshOccurrences()}
+          onFiltersChange={updateOccurrenceFilters}
+          onSelect={(id) => {
+            setSelectedOccurrenceId(id);
+            setPage('detalhe-cidadao');
+          }}
+          setPage={setPage}
+        />
+      ) : page === 'detalhe-cidadao' ? (
+        <CidadaoDetalheOcorrencia
+          occurrence={selectedOccurrence}
+          loading={detailLoading}
+          error={detailError}
+          onRefresh={() => refreshDetail()}
+          onEvidenceUploaded={handleEvidenceUploaded}
+          onDownloadEvidence={downloadEvidence}
+          setPage={setPage}
+        />
+      ) : page === 'dashboard' ? (
+        <CidadaoDashboard
+          user={user}
+          occurrences={occurrences.items}
+          statistics={occurrences.estatisticas}
+          loading={occurrencesLoading}
+          error={occurrencesError}
+          unreadNotifications={unreadNotifications}
+          identityStatus={identityStatus}
+          onRefresh={() => refreshOccurrences({ page: 1, per_page: 5 })}
+          onSelect={(id) => {
+            setSelectedOccurrenceId(id);
+            setPage('detalhe-cidadao');
+          }}
+          setPage={setPage}
+        />
+      ) : page === 'alertas' ? (
+        <CidadaoAlertas
+          alertas={publicAlerts}
+          loading={publicAlertsLoading}
+          error={publicAlertsError}
+          onRefresh={refreshPublicAlerts}
+          setPage={setPage}
+          setSelectedAlerta={setSelectedAlert}
+        />
+      ) : page === 'informacoes' ? (
+        <CidadaoInformacoes
+          alertas={publicAlerts}
+          loading={publicAlertsLoading}
+          error={publicAlertsError}
+          onRefresh={refreshPublicAlerts}
+          setPage={setPage}
+          setSelectedAlerta={setSelectedAlert}
+        />
+      ) : page === 'detalhe-alerta' ? (
+        <CidadaoDetalheAlerta
+          a={selectedAlert}
+          loading={selectedAlertLoading}
+          error={selectedAlertError}
+          setPage={setPage}
+        />
+      ) : (
+        <EmptyState
+          icon="Construction"
+          title="Funcionalidade indisponível"
+          description="A API ainda não disponibiliza esta operação. Nenhum dado simulado está a ser apresentado."
+        />
+      )}
+    </CitizenLayout></Suspense>
   );
 }
 
@@ -271,7 +364,9 @@ export function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <MainApp />
+        <AuthProvider>
+          <MainApp />
+        </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
   );

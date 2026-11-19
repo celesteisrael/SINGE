@@ -2,83 +2,116 @@
 
 namespace App\Models;
 
+use App\Enums\EstadoOcorrencia;
+use Database\Factories\OcorrenciaFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Ocorrencia extends Model
 {
+    /** @use HasFactory<OcorrenciaFactory> */
+    use HasFactory;
+
     protected $table = 'ocorrencias';
 
     protected $fillable = [
-        'ref',
         'titulo',
         'descricao',
-        'provincia',
-        'distrito',
-        'localidade',
         'localizacao',
+        'localizacao_id',
         'latitude',
         'longitude',
-        'tipo',
         'tipo_ocorrencia_id',
         'prioridade_id',
         'utilizador_id',
+        'origem',
+        'comunicante_nome',
+        'comunicante_contacto',
+        'data_ocorrencia',
         'estado',
-        'fonte',
-        'afectados',
-        'risco',
-        'responsavel',
     ];
-
-    protected $appends = ['lat', 'lng', 'prioridade'];
 
     protected function casts(): array
     {
         return [
-            'latitude' => 'float',
-            'longitude' => 'float',
-            'afectados' => 'integer',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
+            'data_ocorrencia' => 'datetime',
+            'estado' => EstadoOcorrencia::class,
         ];
     }
 
-    public function getLatAttribute()
-    {
-        return $this->latitude;
-    }
-
-    public function getLngAttribute()
-    {
-        return $this->longitude;
-    }
-
-    public function getPrioridadeAttribute()
-    {
-        return $this->prioridadeRelacao?->nome ?? null;
-    }
-
+    /** @return BelongsTo<TipoOcorrencia, $this> */
     public function tipoOcorrencia(): BelongsTo
     {
-        return $this->belongsTo(TipoOcorrencia::class, 'tipo_ocorrencia_id');
+        return $this->belongsTo(
+            TipoOcorrencia::class,
+            'tipo_ocorrencia_id'
+        );
     }
 
-    public function prioridadeRelacao(): BelongsTo
+    /** @return BelongsTo<Prioridade, $this> */
+    public function prioridade(): BelongsTo
     {
-        return $this->belongsTo(Prioridade::class, 'prioridade_id');
+        return $this->belongsTo(
+            Prioridade::class,
+            'prioridade_id'
+        );
     }
 
+    /** @return BelongsTo<User, $this> */
     public function utilizador(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'utilizador_id');
+        return $this->belongsTo(
+            User::class,
+            'utilizador_id'
+        );
     }
 
+    /** @return BelongsTo<Localizacao, $this> */
+    public function localizacaoGeografica(): BelongsTo
+    {
+        return $this->belongsTo(Localizacao::class, 'localizacao_id');
+    }
+
+    /** @return HasMany<Missao, $this> */
     public function missoes(): HasMany
     {
         return $this->hasMany(Missao::class, 'ocorrencia_id');
     }
 
+    /** @return HasMany<HistoricoOcorrencia, $this> */
     public function historico(): HasMany
     {
-        return $this->hasMany(HistoricoOcorrencia::class, 'ocorrencia_id');
+        return $this->hasMany(
+            HistoricoOcorrencia::class,
+            'ocorrencia_id'
+        );
+    }
+
+    /** @return HasMany<Evidencia, $this> */
+    public function evidencias(): HasMany
+    {
+        return $this->hasMany(Evidencia::class, 'ocorrencia_id');
+    }
+
+    /** @return HasMany<AvaliacaoPrioridade, $this> */
+    public function avaliacoesPrioridade(): HasMany
+    {
+        return $this->hasMany(AvaliacaoPrioridade::class, 'ocorrencia_id');
+    }
+
+    /** @return HasMany<ValidacaoOcorrencia, $this> */
+    public function validacoes(): HasMany
+    {
+        return $this->hasMany(ValidacaoOcorrencia::class, 'ocorrencia_id');
+    }
+
+    /** @return HasMany<Notificacao, $this> */
+    public function notificacoes(): HasMany
+    {
+        return $this->hasMany(Notificacao::class, 'ocorrencia_id');
     }
 }

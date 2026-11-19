@@ -4,7 +4,6 @@ import {
   ShieldAlert, 
   LayoutDashboard, 
   AlertCircle, 
-  PlusCircle, 
   BarChart3, 
   Sparkles, 
   Users, 
@@ -29,7 +28,6 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
         items: [
           { name: 'Dashboard', path: '/operador/dashboard', icon: LayoutDashboard },
           { name: 'Ocorrências', path: '/operador/ocorrencias', icon: AlertCircle },
-          { name: 'Registar Ocorrência', path: '/operador/nova-ocorrencia', icon: PlusCircle },
         ]
       }
     ],
