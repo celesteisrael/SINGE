@@ -17,19 +17,9 @@ services:
       - key: APP_KEY
         value: base64:N7WNBHhsTi6BSh7JS3njA2GRyupGOnVYq75Wpmq9cAs=
       - key: DB_CONNECTION
-        value: mysql
-      - key: DB_HOST
-        value: gateway01.ap-northeast-1.prod.aws.tidbcloud.com
-      - key: DB_PORT
-        value: "4000"
+        value: sqlite
       - key: DB_DATABASE
-        value: singe_db
-      - key: DB_USERNAME
-        value: 2TEbWH1qjlLqBxg.root
-      - key: DB_PASSWORD
-        sync: false
-      - key: MYSQL_ATTR_SSL_CA
-        value: /etc/ssl/certs/ca-certificates.crt
+        value: /var/www/html/database/database.sqlite
       - key: RUN_MIGRATIONS
         value: "false"
       - key: RUN_SEEDERS

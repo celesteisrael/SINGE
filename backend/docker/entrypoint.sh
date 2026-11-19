@@ -10,8 +10,16 @@ fi
 # Discover Laravel packages now that environment is available
 php artisan package:discover --ansi || true
 
-# Run migrations automatically if RUN_MIGRATIONS is true
-if [ "$RUN_MIGRATIONS" = "true" ]; then
+# If using SQLite, ensure database file exists, has correct permissions and is seeded
+if [ "$DB_CONNECTION" = "sqlite" ] || [ -z "$DB_CONNECTION" ]; then
+    echo "Configuring SQLite database..."
+    mkdir -p /var/www/html/database
+    touch /var/www/html/database/database.sqlite
+    chown -R www-data:www-data /var/www/html/database
+    chmod -R 775 /var/www/html/database
+    php artisan migrate --force
+    php artisan db:seed --force
+elif [ "$RUN_MIGRATIONS" = "true" ]; then
     echo "Running database migrations..."
     php artisan migrate --force
     if [ "$RUN_SEEDERS" = "true" ]; then
