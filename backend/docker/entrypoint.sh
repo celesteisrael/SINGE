@@ -7,6 +7,16 @@ if [ -n "$PORT" ]; then
     sed -i "s/listen 80;/listen $PORT;/g" /etc/nginx/http.d/default.conf
 fi
 
+# Load secret file from Render if present
+if [ -f /etc/secrets/.env ]; then
+    echo "Found /etc/secrets/.env, applying to /var/www/html/.env..."
+    if [ -f /var/www/html/.env ]; then
+        cat /etc/secrets/.env >> /var/www/html/.env
+    else
+        cp /etc/secrets/.env /var/www/html/.env
+    fi
+fi
+
 # Discover Laravel packages now that environment is available
 php artisan package:discover --ansi || true
 

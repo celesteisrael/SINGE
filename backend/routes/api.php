@@ -40,6 +40,11 @@ Route::get('/health', function () {
             'user' => config('database.connections.mysql.username'),
             'error' => $dbError,
         ],
+        'openai' => [
+            'enabled' => (bool) config('services.openai.enabled'),
+            'configured' => ! empty(config('services.openai.api_key')),
+            'model' => config('services.openai.model'),
+        ],
     ]);
 });
 
