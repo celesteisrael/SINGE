@@ -7,6 +7,9 @@ if [ -n "$PORT" ]; then
     sed -i "s/listen 80;/listen $PORT;/g" /etc/nginx/http.d/default.conf
 fi
 
+# Discover Laravel packages now that environment is available
+php artisan package:discover --ansi || true
+
 # Run migrations automatically if RUN_MIGRATIONS is true
 if [ "$RUN_MIGRATIONS" = "true" ]; then
     echo "Running database migrations..."
