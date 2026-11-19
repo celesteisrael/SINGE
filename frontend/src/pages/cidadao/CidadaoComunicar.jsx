@@ -9,11 +9,11 @@ import { ocorrenciasService } from '../../services/ocorrenciasService';
 import { NetworkError, ValidationError } from '../../services/api';
 
 const SECTIONS = [
-  { id: 'A', label: 'Tipo' },
-  { id: 'B', label: 'Descrição' },
-  { id: 'C', label: 'Localização' },
-  { id: 'D', label: 'Evidências' },
-  { id: 'E', label: 'Confirmação' },
+  { id: 'A', label: 'Tipo',        icon: 'Sliders' },
+  { id: 'B', label: 'Descrição',   icon: 'FileText' },
+  { id: 'C', label: 'Localização', icon: 'MapPin' },
+  { id: 'D', label: 'Evidências',  icon: 'Upload' },
+  { id: 'E', label: 'Confirmação', icon: 'CheckCircle' },
 ];
 
 const TYPE_ICONS = ['Waves', 'Wind', 'Flame', 'MapPin', 'AlertTriangle', 'Leaf', 'AlertCircle'];
@@ -44,6 +44,20 @@ function mapValidationErrors(errors) {
     tipo: mapped.tipo_ocorrencia_id || mapped.tipo,
     coordenadas: mapped.latitude || mapped.longitude || mapped.coordenadas,
   };
+}
+
+/* ─── Section header reutilizável ─────────────────────────── */
+function SectionTitle({ icon, accent, title, hint }) {
+  return (
+    <div className="mb-4">
+      <h3 className="font-semibold text-ink dark:text-dink flex items-center gap-2">
+        <span className={`w-1 h-5 rounded-full ${accent}`} />
+        {icon && <Icon name={icon} size={15} className="text-muted dark:text-dmuted" />}
+        {title}
+      </h3>
+      {hint && <p className="text-xs text-muted dark:text-dmuted mt-1 ml-3">{hint}</p>}
+    </div>
+  );
 }
 
 export function CidadaoComunicar({ user, types = [], typesError = '', setPage, onCreated }) {
@@ -172,108 +186,201 @@ export function CidadaoComunicar({ user, types = [], typesError = '', setPage, o
     lng: form.lng === '' ? null : Number(form.lng),
   };
 
+  const currentIndex = SECTIONS.findIndex(item => item.id === section);
+  const progress = ((currentIndex + 1) / SECTIONS.length) * 100;
+
+  /* ═══════════ ECRÃ DE SUCESSO ═══════════ */
   if (submitted) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <Card className="p-8 text-center">
-          <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-950/50 text-green-600 dark:text-green-300 mx-auto flex items-center justify-center">
-            <Icon name="CheckCircle" size={32} />
-          </div>
-          <h2 className="text-xl font-bold text-ink dark:text-dink mt-4">Ocorrência submetida</h2>
-          <p className="text-sm text-muted dark:text-dmuted mt-1">
-            A comunicação foi persistida e aguarda avaliação pelas entidades responsáveis.
-          </p>
-          <div className="mt-6 p-4 rounded-lg bg-light dark:bg-dsidebar/40 text-left space-y-2 border border-bd dark:border-dborder">
-            <div className="flex justify-between gap-4 text-sm">
-              <span className="text-muted dark:text-dmuted">Identificador</span>
-              <span className="font-mono font-semibold text-brand dark:text-dblue">#{submitted.id}</span>
+      <div className="max-w-2xl mx-auto space-y-4">
+        <Card className="relative overflow-hidden p-8 text-center">
+          <div className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full bg-emerald-400/10 dark:bg-emerald-500/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 left-1/3 w-56 h-56 rounded-full bg-green-400/10 dark:bg-green-500/10 blur-3xl" />
+
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-white mx-auto flex items-center justify-center shadow-md">
+              <Icon name="CheckCircle" size={32} />
             </div>
-            <div className="flex justify-between gap-4 text-sm">
-              <span className="text-muted dark:text-dmuted">Registada em</span>
-              <span className="text-ink dark:text-dink">{submitted.created_at ? new Date(submitted.created_at).toLocaleString('pt-MZ') : 'Registada'}</span>
+            <h2 className="text-xl font-bold text-ink dark:text-dink mt-4">Ocorrência submetida</h2>
+            <p className="text-sm text-muted dark:text-dmuted mt-1">
+              A comunicação foi persistida e aguarda avaliação pelas entidades responsáveis.
+            </p>
+
+            {/* Metadados em grelha */}
+            <div className="mt-6 grid grid-cols-2 gap-2 text-left">
+              {[
+                { label: 'Identificador', value: `#${submitted.id}`, mono: true, accent: 'text-brand dark:text-dblue' },
+                { label: 'Registada em', value: submitted.created_at ? new Date(submitted.created_at).toLocaleString('pt-MZ') : 'Registada' },
+                { label: 'Tipo', value: submitted.tipo_ocorrencia?.nome || '—' },
+                { label: 'Prioridade', value: 'Por avaliar', accent: 'text-amber-600 dark:text-amber-400' },
+              ].map((row, i) => (
+                <div key={i} className="p-3 rounded-lg border border-bd dark:border-dborder bg-light/60 dark:bg-dsidebar/40">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-muted dark:text-dmuted mb-1">{row.label}</p>
+                  <p className={`text-sm font-semibold text-ink dark:text-dink truncate ${row.mono ? 'font-mono' : ''} ${row.accent || ''}`}>
+                    {row.value}
+                  </p>
+                </div>
+              ))}
             </div>
-            <div className="flex justify-between gap-4 text-sm">
-              <span className="text-muted dark:text-dmuted">Tipo</span>
-              <span className="text-ink dark:text-dink">{submitted.tipo_ocorrencia?.nome}</span>
+
+            <p className="mt-4 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-xs text-amber-900 dark:text-amber-100 text-left inline-flex items-start gap-2">
+              <Icon name="Info" size={14} className="shrink-0 mt-0.5" />
+              <span>O registo não confirma a mobilização de uma equipa nem garante assistência imediata.</span>
+            </p>
+
+            <div className="mt-6 flex gap-2 justify-center flex-wrap">
+              <Button icon="Eye" onClick={() => setPage('minhas-ocorrencias')}>Acompanhar ocorrência</Button>
+              <Button variant="secondary" icon="PlusCircle" onClick={reset}>Nova comunicação</Button>
             </div>
-            <div className="flex justify-between gap-4 text-sm">
-              <span className="text-muted dark:text-dmuted">Prioridade</span>
-              <span className="text-amber-600 dark:text-amber-400 font-semibold">Por avaliar</span>
-            </div>
-          </div>
-          <p className="mt-4 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-xs text-amber-900 dark:text-amber-100 text-left">
-            O registo não confirma a mobilização de uma equipa nem garante assistência imediata.
-          </p>
-          <div className="mt-6 flex gap-2 justify-center flex-wrap">
-            <Button icon="Eye" onClick={() => setPage('minhas-ocorrencias')}>Acompanhar ocorrência</Button>
-            <Button variant="secondary" onClick={reset}>Nova comunicação</Button>
           </div>
         </Card>
       </div>
     );
   }
 
+  /* ═══════════ ECRÃ DE FORMULÁRIO ═══════════ */
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-ink dark:text-dink">Comunicar uma Ocorrência</h1>
-        <p className="text-sm text-muted dark:text-dmuted mt-1">
-          Forneça informações claras para ajudar as entidades responsáveis a compreender a situação.
-        </p>
-      </div>
+    <div className="max-w-4xl mx-auto space-y-5">
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {SECTIONS.map((item, index) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setSection(item.id)}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
-              section === item.id
-                ? 'bg-brand text-white font-medium'
-                : 'bg-white dark:bg-dcard border border-bd dark:border-dborder text-ink dark:text-dink'
-            }`}
-          >
-            <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs">{index + 1}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
+      {/* ─── Cabeçalho ─────────────────────────────────────── */}
+      <header className="relative overflow-hidden rounded-2xl border border-bd dark:border-dborder bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/40 dark:from-slate-900 dark:via-slate-900/80 dark:to-emerald-950/30 p-5 shadow-sm">
+        <div className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full bg-emerald-400/10 dark:bg-emerald-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 left-1/3 w-56 h-56 rounded-full bg-teal-400/10 dark:bg-teal-500/10 blur-3xl" />
+
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold uppercase tracking-wider border border-emerald-200/60 dark:border-emerald-800/50">
+              <Icon name="AlertCircle" size={11} />
+              Comunicação ao Cidadão
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[10px] font-semibold border border-slate-200/60 dark:border-slate-700 tabular-nums">
+              Passo {currentIndex + 1} de {SECTIONS.length}
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink dark:text-dink">Comunicar uma Ocorrência</h1>
+          <p className="mt-1 text-sm text-muted dark:text-dmuted max-w-2xl">
+            Forneça informações claras para ajudar as entidades responsáveis a compreender a situação.
+          </p>
+        </div>
+      </header>
+
+      {/* ─── Stepper ──────────────────────────────────────── */}
+      <div className="space-y-3">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {SECTIONS.map((item, index) => {
+            const isActive = section === item.id;
+            const isPast = index < currentIndex;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSection(item.id)}
+                className={`group flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm whitespace-nowrap transition-all ${
+                  isActive
+                    ? 'bg-brand text-white font-semibold shadow-sm'
+                    : isPast
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-white dark:bg-dcard border border-bd dark:border-dborder text-ink dark:text-dink hover:border-brand/40'
+                }`}
+              >
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                  isActive
+                    ? 'bg-white/20'
+                    : isPast
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800'
+                }`}>
+                  {isPast ? <Icon name="CheckCircle" size={12} /> : index + 1}
+                </span>
+                <Icon name={item.icon} size={13} className={isActive ? 'opacity-90' : ''} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Barra de progresso */}
+        <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
       </div>
 
       <form onSubmit={submit}>
-        <Card className="p-6 space-y-5">
+        <Card className="p-5 md:p-6 space-y-5">
+
+          {/* ═══ SECÇÃO A — TIPO ═══ */}
           {section === 'A' && (
-            <Field label="Seleccione o tipo de ocorrência" required error={fieldErrors.tipo}>
-              {typesError ? (
-                <p role="alert" className="text-sm text-red-700 dark:text-red-300">{typesError}</p>
-              ) : types.length === 0 ? (
-                <p className="text-sm text-muted dark:text-dmuted">Não existem tipos activos disponíveis para registo.</p>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-                  {types.map((type, index) => (
-                    <button
-                      key={type.id}
-                      type="button"
-                      data-testid={`cid-tipo-${type.id}`}
-                      onClick={() => setField('tipo', String(type.id))}
-                      aria-pressed={form.tipo === String(type.id)}
-                      className={`p-3 rounded-lg border-2 flex flex-col items-start gap-1.5 transition-all text-left ${
-                        form.tipo === String(type.id)
-                          ? 'border-brand bg-lblue/50 dark:bg-dblue/10 shadow-sm'
-                          : 'border-bd dark:border-dborder hover:border-brand/50'
-                      }`}
-                    >
-                      <Icon name={TYPE_ICONS[index % TYPE_ICONS.length]} size={22} className="text-brand dark:text-dblue" />
-                      <span className="text-xs font-semibold text-ink dark:text-dink">{type.nome}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </Field>
+            <>
+              <SectionTitle
+                icon="Sliders"
+                accent="bg-gradient-to-b from-blue-500 to-indigo-500"
+                title="Seleccione o tipo de ocorrência"
+                hint="Escolha a categoria que melhor descreve a situação observada."
+              />
+              <Field label="Tipo de ocorrência" required error={fieldErrors.tipo}>
+                {typesError ? (
+                  <div role="alert" className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-300 inline-flex items-start gap-2">
+                    <Icon name="AlertOctagon" size={14} className="shrink-0 mt-0.5" />
+                    <span>{typesError}</span>
+                  </div>
+                ) : types.length === 0 ? (
+                  <div className="p-4 rounded-lg border border-bd dark:border-dborder bg-light/50 dark:bg-dsidebar/30 text-center">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 text-muted dark:text-dmuted flex items-center justify-center mx-auto mb-2">
+                      <Icon name="Info" size={18} />
+                    </div>
+                    <p className="text-sm text-muted dark:text-dmuted">Não existem tipos activos disponíveis para registo.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                    {types.map((type, index) => {
+                      const selected = form.tipo === String(type.id);
+                      return (
+                        <button
+                          key={type.id}
+                          type="button"
+                          data-testid={`cid-tipo-${type.id}`}
+                          onClick={() => setField('tipo', String(type.id))}
+                          aria-pressed={selected}
+                          className={`group relative p-3.5 rounded-xl border-2 flex flex-col items-start gap-2 transition-all text-left ${
+                            selected
+                              ? 'border-brand bg-blue-50/60 dark:bg-blue-950/30 shadow-sm ring-2 ring-brand/20'
+                              : 'border-bd dark:border-dborder hover:border-brand/50 hover:shadow-sm hover:-translate-y-0.5'
+                          }`}
+                        >
+                          {selected && (
+                            <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-brand text-white flex items-center justify-center">
+                              <Icon name="Check" size={10} />
+                            </span>
+                          )}
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                            selected
+                              ? 'bg-brand text-white'
+                              : 'bg-blue-100 dark:bg-blue-950/60 text-brand dark:text-dblue'
+                          }`}>
+                            <Icon name={TYPE_ICONS[index % TYPE_ICONS.length]} size={18} />
+                          </div>
+                          <span className="text-xs font-semibold text-ink dark:text-dink leading-snug">{type.nome}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </Field>
+            </>
           )}
 
+          {/* ═══ SECÇÃO B — DESCRIÇÃO ═══ */}
           {section === 'B' && (
             <>
+              <SectionTitle
+                icon="FileText"
+                accent="bg-gradient-to-b from-cyan-500 to-blue-500"
+                title="Descrição do que observou"
+                hint="Seja claro e objectivo — a informação é partilhada com as equipas de resposta."
+              />
               <Field
                 label="Título / descrição resumida"
                 required
@@ -312,39 +419,57 @@ export function CidadaoComunicar({ user, types = [], typesError = '', setPage, o
                   maxLength={1000}
                   required
                 />
+                <p className="text-[10px] text-muted dark:text-dmuted mt-1 text-right tabular-nums">
+                  {form.descricao.length}/1000
+                </p>
               </Field>
             </>
           )}
 
+          {/* ═══ SECÇÃO C — LOCALIZAÇÃO ═══ */}
           {section === 'C' && (
             <>
+              <SectionTitle
+                icon="MapPin"
+                accent="bg-gradient-to-b from-emerald-500 to-teal-500"
+                title="Localização da ocorrência"
+                hint="Indique a área geográfica ou as coordenadas exactas."
+              />
+
               {fieldErrors.localizacao && (
-                <div role="alert" data-testid="localizacao-error" className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-300">
-                  {fieldErrors.localizacao}
+                <div role="alert" data-testid="localizacao-error" className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-300 inline-flex items-start gap-2">
+                  <Icon name="AlertOctagon" size={14} className="shrink-0 mt-0.5" />
+                  <span>{fieldErrors.localizacao}</span>
                 </div>
               )}
+
               <GeographicComboboxes required value={form.geografia} errors={fieldErrors} onChange={geografia => {
                 setForm(current => ({ ...current, geografia, provincia_id: geografia.provincia_id, distrito_id: geografia.distrito_id, provincia: geografia.provincia || '', distrito: geografia.distrito || '', endereco: geografia.endereco_referencia || current.endereco }));
                 setFieldErrors(current => { const next = { ...current }; Object.keys(next).filter(key => key.endsWith('_id') || key === 'localizacao').forEach(key => delete next[key]); return next; });
               }} />
+
               <div className="flex flex-wrap gap-2 items-center pt-2">
                 <Button type="button" variant="secondary" icon="Navigation" onClick={getDeviceLocation} disabled={geoLoading}>
                   {geoLoading ? 'A obter coordenadas…' : 'Usar a minha localização GPS'}
                 </Button>
                 {form.lat && form.lng && (
-                  <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1 font-medium">
-                    <Icon name="CheckCircle" size={14} /> {Number(form.lat).toFixed(4)}, {Number(form.lng).toFixed(4)}
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-950/60 dark:text-green-300 border border-green-200/70 dark:border-green-800/60">
+                    <Icon name="CheckCircle" size={12} /> {Number(form.lat).toFixed(4)}, {Number(form.lng).toFixed(4)}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted dark:text-dmuted">
+
+              <p className="text-xs text-muted dark:text-dmuted p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-bd dark:border-dborder inline-flex items-start gap-2">
+                <Icon name="Info" size={12} className="shrink-0 mt-0.5" />
                 As coordenadas só são obtidas após a sua autorização explícita. Pode marcar o local no mapa ou preencher a localização textual.
               </p>
+
               <Field label="Localização no mapa" hint="Clique no mapa para marcar o local exacto (opcional).">
-                <div className="h-64 rounded-xl overflow-hidden mt-2">
+                <div className="h-64 rounded-xl overflow-hidden mt-2 border border-bd dark:border-dborder">
                   <LocationPicker value={locationValue} onChange={coords => { setCoordinates(coords.lat, coords.lng); if (coords.label) setField('endereco', coords.label); }} height={256} />
                 </div>
               </Field>
+
               <div className="grid md:grid-cols-2 gap-4">
                 <Field label="Latitude" htmlFor="cid-lat" error={fieldErrors.latitude || fieldErrors.coordenadas}>
                   <input type="number" step="any" id="cid-lat" data-testid="cid-lat" value={form.lat} onChange={event => setField('lat', event.target.value)} className={inputCls} />
@@ -356,20 +481,51 @@ export function CidadaoComunicar({ user, types = [], typesError = '', setPage, o
             </>
           )}
 
+          {/* ═══ SECÇÃO D — EVIDÊNCIAS ═══ */}
           {section === 'D' && (
-            <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-lblue/40 dark:bg-dblue/10 p-4">
-              <h2 className="font-semibold text-ink dark:text-dink">Evidências</h2>
-              <p className="mt-2 text-sm text-muted dark:text-dmuted">
-                Depois de registar a ocorrência, poderá anexar imagens JPG/PNG ou PDF (até 10 MB por ficheiro) na página de detalhes.
-                Não coloque a sua segurança em risco para obter evidências.
-              </p>
-            </div>
+            <>
+              <SectionTitle
+                icon="Upload"
+                accent="bg-gradient-to-b from-purple-500 to-pink-500"
+                title="Evidências"
+                hint="Documente a ocorrência — se possível e em segurança."
+              />
+
+              <div className="rounded-xl border border-blue-200 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/30 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0">
+                    <Icon name="Upload" size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-ink dark:text-dink">Anexos disponíveis após o registo</p>
+                    <p className="text-xs text-muted dark:text-dmuted mt-0.5">
+                      Depois de registar a ocorrência, poderá anexar imagens JPG/PNG ou PDF (até 10 MB por ficheiro) na página de detalhes.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 p-3 inline-flex items-start gap-2">
+                <Icon name="AlertTriangle" size={14} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-900 dark:text-amber-100">
+                  <strong className="font-semibold">Prioridade à sua segurança.</strong> Não coloque a sua integridade física em risco para obter evidências.
+                </p>
+              </div>
+            </>
           )}
 
+          {/* ═══ SECÇÃO E — CONFIRMAÇÃO ═══ */}
           {section === 'E' && (
             <>
-              <div className="p-4 rounded-lg bg-lblue dark:bg-dblue/10 space-y-2 border border-blue-200 dark:border-blue-900/30">
-                <p className="text-sm font-semibold text-ink dark:text-dink">Conta utilizada para esta comunicação</p>
+              <SectionTitle
+                icon="CheckCircle"
+                accent="bg-gradient-to-b from-emerald-500 to-green-500"
+                title="Confirmação final"
+                hint="Reveja os dados e confirme antes de submeter."
+              />
+
+              <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/50 space-y-2">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-blue-700 dark:text-blue-300">Conta utilizada</p>
                 <div className="flex items-center gap-2 text-sm text-ink dark:text-dink">
                   <Icon name="User" size={14} className="text-muted dark:text-dmuted" /> {user.name}
                 </div>
@@ -377,7 +533,8 @@ export function CidadaoComunicar({ user, types = [], typesError = '', setPage, o
                   <Icon name="Mail" size={14} className="text-muted dark:text-dmuted" /> {user.email}
                 </div>
               </div>
-              <label className="flex items-start gap-3 cursor-pointer">
+
+              <label className="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-bd dark:border-dborder bg-light/40 dark:bg-dsidebar/30 hover:bg-light dark:hover:bg-dsidebar/50 transition-colors">
                 <input
                   type="checkbox"
                   id="cid-confirm"
@@ -385,24 +542,34 @@ export function CidadaoComunicar({ user, types = [], typesError = '', setPage, o
                   checked={form.confirmed}
                   onChange={event => setField('confirmed', event.target.checked)}
                   aria-invalid={Boolean(fieldErrors.confirm)}
-                  className="mt-1 w-4 h-4 rounded border-bd text-brand focus:ring-brand"
+                  className="mt-0.5 w-4 h-4 rounded border-bd text-brand focus:ring-brand shrink-0"
                 />
                 <span className="text-sm text-ink dark:text-dink">
                   Confirmo que as informações prestadas são verdadeiras e correspondem ao que observei.
                 </span>
               </label>
-              {fieldErrors.confirm && <p role="alert" data-testid="confirm-error" className="text-xs text-red-600">{fieldErrors.confirm}</p>}
-              <p className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs text-muted dark:text-dmuted">
-                A comunicação não confirma a mobilização de equipas. Em perigo imediato, contacte os serviços de emergência competentes.
-              </p>
+              {fieldErrors.confirm && (
+                <p role="alert" data-testid="confirm-error" className="text-xs text-red-600 dark:text-red-400 inline-flex items-center gap-1">
+                  <Icon name="AlertOctagon" size={12} /> {fieldErrors.confirm}
+                </p>
+              )}
+
+              <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800 inline-flex items-start gap-2">
+                <Icon name="Info" size={14} className="text-muted dark:text-dmuted shrink-0 mt-0.5" />
+                <p className="text-xs text-muted dark:text-dmuted">
+                  A comunicação não confirma a mobilização de equipas. Em perigo imediato, contacte os serviços de emergência competentes.
+                </p>
+              </div>
             </>
           )}
         </Card>
 
-        <div className="mt-4 flex gap-2 justify-between">
+        {/* ─── Navegação ──────────────────────────────────── */}
+        <div className="mt-4 flex gap-2 justify-between flex-wrap">
           <Button
             type="button"
             variant="secondary"
+            icon="ChevronLeft"
             disabled={section === 'A' || isSubmitting}
             onClick={() => setSection(SECTIONS[Math.max(0, SECTIONS.findIndex(item => item.id === section) - 1)].id)}
           >
@@ -413,6 +580,7 @@ export function CidadaoComunicar({ user, types = [], typesError = '', setPage, o
             {section !== 'E' ? (
               <Button
                 type="button"
+                icon="ChevronRight"
                 onClick={() => setSection(SECTIONS[Math.min(SECTIONS.length - 1, SECTIONS.findIndex(item => item.id === section) + 1)].id)}
               >
                 Seguinte
