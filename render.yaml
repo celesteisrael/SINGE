@@ -36,11 +36,12 @@ services:
         value: "false"
 
   # Frontend React (Vite SPA)
-  - type: static
+  - type: web
     name: singe-frontend
+    runtime: static
     rootDir: frontend
     buildCommand: npm install --legacy-peer-deps && npm run build
-    staticPublishPath: dist
+    staticPublishPath: ./dist
     routes:
       - type: rewrite
         source: /*
